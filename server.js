@@ -175,5 +175,3 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Data Directory: ${DATA_DIR}`);
 });
-
-
