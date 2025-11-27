@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>👂🏻黎吧啦ai站👂🏻</title>
     <style>
-        /* 基础样式继承之前的 */
         :root { --bg-color: #f8fafe; --chat-bg: #ffffff; --sidebar-bg: #ffffff; --text-color: #333333; --border-color: #ebedf0; --primary-color: #4f46e5; --my-msg-bg: #4f46e5; --my-msg-text: #ffffff; --ai-msg-bg: #f3f4f6; --ai-msg-text: #1f2937; --token-text: #9ca3af; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         [data-theme="dark"] { --bg-color: #111827; --chat-bg: #1f2937; --sidebar-bg: #1f2937; --text-color: #f3f4f6; --border-color: #374151; --primary-color: #6366f1; --my-msg-bg: #6366f1; --my-msg-text: #ffffff; --ai-msg-bg: #374151; --ai-msg-text: #f3f4f6; --token-text: #9ca3af; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -70,7 +69,10 @@
         .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
         .admin-body { flex: 1; overflow-y: auto; }
         .admin-section { margin-bottom: 20px; }
-        .admin-section h4 { margin: 0 0 10px 0; font-size: 14px; color: var(--primary-color); }
+        /* 折叠样式 */
+        .collapse-header { cursor: pointer; margin: 0 0 10px 0; font-size: 14px; color: var(--primary-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.03); padding: 10px; border-radius: 8px;}
+        .collapse-header:hover { background: rgba(0,0,0,0.06); }
+        
         .stat-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .stat-table th, .stat-table td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border-color); }
         .form-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
@@ -99,7 +101,7 @@
     <div class="admin-panel">
         <div class="admin-header">
             <h3 style="margin:0">⚙️ 管理后台</h3>
-            <button onclick="document.getElementById('adminModal').style.display='none'" style="border:none;background:none;font-size:20px;cursor:pointer;">✕</button>
+            <button onclick="document.getElementById('adminModal').style.display='none'" style="border:none;background:none;font-size:20px;cursor:pointer; color:var(--text-color);">✕</button>
         </div>
         <div class="admin-body">
             <div class="admin-section">
@@ -109,14 +111,20 @@
                     <tbody></tbody>
                 </table>
             </div>
+            
             <div class="admin-section">
-                <h4>➕ 添加新预设</h4>
-                <div class="form-group"><input type="text" id="addName" placeholder="显示名称 (如: DeepSeek)"></div>
-                <div class="form-group"><input type="text" id="addDesc" placeholder="副标题 (如: V3 Chat)"></div>
-                <div class="form-group"><input type="text" id="addUrl" placeholder="API Base URL"></div>
-                <div class="form-group"><input type="text" id="addKey" placeholder="API Key"></div>
-                <div class="form-group"><input type="text" id="addModelId" placeholder="Model ID (如: deepseek-chat)"></div>
-                <button class="login-btn" onclick="addPreset()">保存并添加</button>
+                <h4 class="collapse-header" onclick="toggleAddPreset()">
+                    <span>➕ 添加新预设</span>
+                    <span id="collapseIcon" style="font-size:12px;">▼</span>
+                </h4>
+                <div id="addPresetForm" style="display:none;">
+                    <div class="form-group"><input type="text" id="addName" placeholder="显示名称 (如: DeepSeek)"></div>
+                    <div class="form-group"><input type="text" id="addDesc" placeholder="副标题 (如: V3 Chat)"></div>
+                    <div class="form-group"><input type="text" id="addUrl" placeholder="API Base URL"></div>
+                    <div class="form-group"><input type="text" id="addKey" placeholder="API Key"></div>
+                    <div class="form-group"><input type="text" id="addModelId" placeholder="Model ID (如: deepseek-chat)"></div>
+                    <button class="login-btn" onclick="addPreset()">保存并添加</button>
+                </div>
             </div>
         </div>
     </div>
@@ -151,7 +159,7 @@
         <div class="input-wrapper">
             <div id="preview-area" style="display:flex; gap:10px; padding-bottom:10px;"></div>
             <div class="input-container">
-                <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFileSelect(this)">
+                <input type="file" id="fileInput" accept="image/*,.json,.txt,.js,.md,.csv,.py" style="display:none;" onchange="handleFileSelect(this)">
                 <button class="action-btn" onclick="document.getElementById('fileInput').click()">📎</button>
                 <textarea id="userInput" placeholder="输入消息..." rows="1" oninput="autoResize(this)"></textarea>
                 <button class="action-btn send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
@@ -161,18 +169,25 @@
 </div>
 
 <script>
-    let PRESETS = []; // 从后台动态获取
+    let PRESETS = []; 
     let sessions = [];
     let currentSessionId = null;
     let isRequesting = false;
     let currentImageBase64 = null;
+    
+    // 新增：文件上传相关变量
+    let currentFileContent = null; 
+    let currentFileName = "";
+
     let authToken = localStorage.getItem('authToken');
     let isAdmin = localStorage.getItem('isAdmin') === 'true';
 
     window.onload = function() {
-        if (authToken) initApp();
         const theme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', theme);
+
+        if (authToken) initApp();
+        
         document.getElementById('userInput').addEventListener('keydown', (e) => {
             if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
         });
@@ -197,7 +212,13 @@
         finally { btn.disabled = false; btn.innerText = "进入 AI 空间"; }
     }
 
-    function logout() { localStorage.clear(); location.reload(); }
+    // --- 修改：Logout 不再清空 Theme ---
+    function logout() { 
+        localStorage.removeItem('authToken'); 
+        localStorage.removeItem('isAdmin');
+        // 注意：不调用 localStorage.clear() 以保留 theme
+        location.reload(); 
+    }
 
     async function initApp() {
         document.getElementById('login-screen').style.display = 'none';
@@ -205,8 +226,8 @@
         
         if(isAdmin) document.getElementById('adminBtn').style.display = 'flex';
 
-        await fetchPresets(); // 1. 获取模型列表
-        await fetchHistory(); // 2. 获取聊天记录
+        await fetchPresets(); 
+        await fetchHistory(); 
     }
 
     async function fetchPresets() {
@@ -230,7 +251,6 @@
         });
     }
 
-    // --- 核心聊天逻辑 ---
     async function fetchHistory() {
         try {
             const res = await fetch('/api/history', { headers: { 'Authorization': `Bearer ${authToken}` } });
@@ -294,20 +314,43 @@
         });
     }
 
+    // --- 修改：sendMessage 支持文本文件发送 ---
     async function sendMessage() {
         if (isRequesting) return;
         const input = document.getElementById('userInput');
         const text = input.value.trim();
-        if (!text && !currentImageBase64) return;
+        if (!text && !currentImageBase64 && !currentFileContent) return;
+        
         const session = sessions.find(s => s.id === currentSessionId);
         if (!session) return;
 
-        let msgPayload = currentImageBase64 ? 
-            [{ type: "text", text: text || "Image" }, { type: "image_url", image_url: { url: currentImageBase64 } }] : text;
+        let msgPayload;
+        
+        // 场景1: 有图
+        if (currentImageBase64) {
+            msgPayload = [{ type: "text", text: text || "分析图片" }, { type: "image_url", image_url: { url: currentImageBase64 } }];
+        } 
+        // 场景2: 有文件内容 (JSON/TXT)
+        else if (currentFileContent) {
+            const fullPrompt = `${text}\n\n[文件 "${currentFileName}" 内容如下]:\n\`\`\`\n${currentFileContent}\n\`\`\``;
+            msgPayload = fullPrompt;
+        } 
+        // 场景3: 纯文本
+        else {
+            msgPayload = text;
+        }
 
-        appendUI(null, "user", text, currentImageBase64);
+        // 界面显示优化
+        let uiText = text;
+        if(currentFileContent) uiText += `\n(📎 已附带文件: ${currentFileName})`;
+
+        appendUI(null, "user", uiText, currentImageBase64);
         session.messages.push({ role: "user", content: msgPayload });
-        input.value = ''; input.style.height = 'auto'; currentImageBase64 = null; document.getElementById('preview-area').innerHTML = '';
+
+        input.value = ''; input.style.height = 'auto'; 
+        currentImageBase64 = null; 
+        currentFileContent = null; // 清空文件
+        document.getElementById('preview-area').innerHTML = '';
 
         isRequesting = true;
         const sendBtn = document.getElementById('sendBtn');
@@ -339,10 +382,13 @@
     // --- 管理员功能 ---
     async function openAdmin() {
         document.getElementById('adminModal').style.display = 'flex';
+        // 默认折叠添加框
+        document.getElementById('addPresetForm').style.display = 'none';
+        document.getElementById('collapseIcon').innerText = '▼';
+        
         const res = await fetch('/api/admin/data', { headers: { 'Authorization': `Bearer ${authToken}` } });
         const data = await res.json();
         if(data.success) {
-            // 渲染统计表
             const tbody = document.querySelector('#statTable tbody');
             tbody.innerHTML = '';
             for (const [user, usage] of Object.entries(data.usage)) {
@@ -352,6 +398,19 @@
                     tbody.innerHTML += `<tr><td>${user}</td><td>${modelName}</td><td>${count}</td></tr>`;
                 }
             }
+        }
+    }
+
+    // 新增：折叠切换函数
+    function toggleAddPreset() {
+        const form = document.getElementById('addPresetForm');
+        const icon = document.getElementById('collapseIcon');
+        if (form.style.display === 'none') {
+            form.style.display = 'block';
+            icon.innerText = '▲';
+        } else {
+            form.style.display = 'none';
+            icon.innerText = '▼';
         }
     }
 
@@ -372,14 +431,45 @@
         
         if(res.ok) {
             alert("添加成功");
-            document.getElementById('adminModal').style.display = 'none';
-            fetchPresets(); // 刷新侧边栏
+            toggleAddPreset(); // 添加成功后折叠
+            fetchPresets(); 
         } else {
             alert("添加失败");
         }
     }
 
-    // 辅助函数
+    // --- 修改：handleFileSelect 支持文本 ---
+    function handleFileSelect(input) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            currentFileName = file.name;
+            const previewArea = document.getElementById('preview-area');
+
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => { 
+                    currentImageBase64 = e.target.result; 
+                    currentFileContent = null;
+                    previewArea.innerHTML = `<div class="preview-item"><img src="${currentImageBase64}"></div>`; 
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // 读取文本
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    currentFileContent = e.target.result;
+                    currentImageBase64 = null;
+                    previewArea.innerHTML = `
+                        <div class="preview-item" style="display:flex;align-items:center;justify-content:center;background:#f3f4f6;font-size:12px;text-align:center;padding:5px;">
+                            📄<br>${currentFileName.slice(0, 8)}...
+                        </div>`;
+                };
+                reader.readAsText(file);
+            }
+        }
+        input.value = '';
+    }
+
     function appendUI(id, role, text, img, isLoading) {
         const box = document.getElementById('chat-box');
         const div = document.createElement('div');
@@ -394,14 +484,6 @@
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
         return div.id;
-    }
-    function handleFileSelect(input) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = (e) => { currentImageBase64 = e.target.result; document.getElementById('preview-area').innerHTML = `<div class="preview-item"><img src="${currentImageBase64}"></div>`; };
-            reader.readAsDataURL(input.files[0]);
-        }
-        input.value = '';
     }
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.querySelector('.overlay').classList.toggle('show'); }
     function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
