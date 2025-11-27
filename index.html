@@ -55,7 +55,7 @@
         .message-content { padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.6; box-shadow: 0 1px 2px rgba(0,0,0,0.05); word-wrap: break-word; overflow-wrap: break-word;}
         .user-msg .message-content { background: var(--my-msg-bg); color: var(--my-msg-text); border-bottom-right-radius: 4px; }
         .ai-msg .message-content { background: var(--ai-msg-bg); color: var(--ai-msg-text); border-bottom-left-radius: 4px; }
-        .message img { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; }
+        .message img { max-width: 100%; border-radius: 8px; margin-top: 8px; }
         .message pre { margin: 0; white-space: pre-wrap; font-family: inherit; overflow-x: auto; }
 
         .input-wrapper { padding: 15px 20px; background: var(--chat-bg); width: 100%; padding-bottom: max(15px, env(safe-area-inset-bottom)); }
@@ -63,12 +63,6 @@
         textarea { flex: 1; width: 0; min-width: 0; background: transparent; border: none; outline: none; resize: none; color: var(--text-color); font-size: 16px; max-height: 120px; font-family: inherit; padding: 8px 0; line-height: 1.4; }
         .action-btn { width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer; background: transparent; color: var(--token-text); font-size: 20px; display:flex; align-items:center; justify-content:center; flex-shrink: 0; margin-bottom: 2px; }
         .send-btn { background: var(--primary-color); color: white; border-radius: 12px; width: 40px; height: 40px; font-size: 16px; }
-
-        /* Preview Area Styles */
-        #preview-area { display:flex; gap:10px; padding-bottom:10px; overflow-x: auto; }
-        .preview-item { position: relative; flex-shrink: 0; }
-        .preview-item img { height: 60px; border-radius: 6px; border: 1px solid var(--border-color); }
-        .preview-remove { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 12px; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
 
         /* Admin Modal */
         #adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
@@ -155,10 +149,9 @@
         </header>
         <div id="chat-box"></div>
         <div class="input-wrapper">
-            <div id="preview-area"></div>
+            <div id="preview-area" style="display:flex; gap:10px; padding-bottom:10px;"></div>
             <div class="input-container">
-                <!-- 添加了 multiple 属性以支持多选 -->
-                <input type="file" id="fileInput" accept="image/*" multiple style="display:none;" onchange="handleFileSelect(this)">
+                <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFileSelect(this)">
                 <button class="action-btn" onclick="document.getElementById('fileInput').click()">📎</button>
                 <textarea id="userInput" placeholder="输入消息..." rows="1" oninput="autoResize(this)"></textarea>
                 <button class="action-btn send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
@@ -172,7 +165,7 @@
     let sessions = [];
     let currentSessionId = null;
     let isRequesting = false;
-    let currentImages = []; // 修改为数组以支持多图
+    let currentImageBase64 = null;
     let authToken = localStorage.getItem('authToken');
     let isAdmin = localStorage.getItem('isAdmin') === 'true';
 
@@ -279,9 +272,8 @@
         else session.messages.forEach(msg => {
             if (Array.isArray(msg.content)) {
                 let txt = msg.content.find(c => c.type === 'text')?.text || '';
-                // 修复：获取所有图片
-                let imgs = msg.content.filter(c => c.type === 'image_url').map(c => c.image_url.url);
-                appendUI(null, msg.role === 'user' ? 'user' : 'ai', txt, imgs);
+                let img = msg.content.find(c => c.type === 'image_url')?.image_url?.url;
+                appendUI(null, msg.role === 'user' ? 'user' : 'ai', txt, img);
             } else appendUI(null, msg.role === 'user' ? 'user' : 'ai', msg.content);
         });
         document.getElementById('headerTitle').innerText = session.name;
@@ -306,26 +298,16 @@
         if (isRequesting) return;
         const input = document.getElementById('userInput');
         const text = input.value.trim();
-        if (!text && currentImages.length === 0) return;
+        if (!text && !currentImageBase64) return;
         const session = sessions.find(s => s.id === currentSessionId);
         if (!session) return;
 
-        let msgPayload = text;
-        if (currentImages.length > 0) {
-            msgPayload = [{ type: "text", text: text || "Image" }];
-            currentImages.forEach(img => {
-                msgPayload.push({ type: "image_url", image_url: { url: img } });
-            });
-        }
+        let msgPayload = currentImageBase64 ? 
+            [{ type: "text", text: text || "Image" }, { type: "image_url", image_url: { url: currentImageBase64 } }] : text;
 
-        appendUI(null, "user", text, currentImages);
+        appendUI(null, "user", text, currentImageBase64);
         session.messages.push({ role: "user", content: msgPayload });
-        
-        // 重置状态
-        input.value = ''; 
-        input.style.height = 'auto'; 
-        currentImages = []; 
-        document.getElementById('preview-area').innerHTML = '';
+        input.value = ''; input.style.height = 'auto'; currentImageBase64 = null; document.getElementById('preview-area').innerHTML = '';
 
         isRequesting = true;
         const sendBtn = document.getElementById('sendBtn');
@@ -398,74 +380,32 @@
     }
 
     // 辅助函数
-    function appendUI(id, role, text, imgs, isLoading) {
+    function appendUI(id, role, text, img, isLoading) {
         const box = document.getElementById('chat-box');
         const div = document.createElement('div');
         div.className = `message ${role === 'user' ? 'user-msg' : 'ai-msg'}`;
         div.id = id || ('msg-' + Date.now());
         let content = `<div class="message-content">`;
-        
-        // 支持图片数组或单张图片
-        if (imgs && Array.isArray(imgs)) {
-            imgs.forEach(img => content += `<img src="${img}"><br>`);
-        } else if (imgs) {
-            content += `<img src="${imgs}"><br>`;
-        }
-
+        if (img) content += `<img src="${img}"><br>`;
         if (isLoading) content += `<span style="color:#999">Thinking...</span>`;
         else content += `<pre>${text || ''}</pre>`;
         content += `</div>`;
         div.innerHTML = content;
         box.appendChild(div);
-        
-        // 核心修改：仅当是用户发送的消息时，才强制滚动到底部
-        if (role === 'user') {
-            box.scrollTop = box.scrollHeight;
-        }
-        
+        box.scrollTop = box.scrollHeight;
         return div.id;
     }
-
-    // 新增：文件多选处理逻辑
     function handleFileSelect(input) {
-        if (input.files && input.files.length > 0) {
-            Array.from(input.files).forEach(file => {
-                const reader = new FileReader();
-                reader.onload = (e) => { 
-                    currentImages.push(e.target.result); 
-                    renderPreview(); 
-                };
-                reader.readAsDataURL(file);
-            });
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => { currentImageBase64 = e.target.result; document.getElementById('preview-area').innerHTML = `<div class="preview-item"><img src="${currentImageBase64}"></div>`; };
+            reader.readAsDataURL(input.files[0]);
         }
         input.value = '';
     }
-
-    // 新增：渲染预览图
-    function renderPreview() {
-        const area = document.getElementById('preview-area');
-        area.innerHTML = '';
-        currentImages.forEach((img, index) => {
-            const div = document.createElement('div');
-            div.className = 'preview-item';
-            div.innerHTML = `
-                <img src="${img}">
-                <button class="preview-remove" onclick="removeImage(${index})">✕</button>
-            `;
-            area.appendChild(div);
-        });
-    }
-
-    // 新增：删除预览图
-    function removeImage(index) {
-        currentImages.splice(index, 1);
-        renderPreview();
-    }
-
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.querySelector('.overlay').classList.toggle('show'); }
     function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
     function toggleTheme() { const n = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', n); localStorage.setItem('theme', n); }
 </script>
 </body>
 </html>
-
