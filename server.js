@@ -161,8 +161,15 @@ app.post('/api/admin/preset', async (req, res) => {
     res.json({ success: true });
 });
 
+// app.get 和 app.listen 替换为异步启动块
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+// --- 强制初始化数据库并启动 (已修改) ---
+(async () => {
+    // 确保数据库文件已创建或加载，然后才启动 HTTP 监听
+    await getDB(); 
+    
+    app.listen(PORT, () => {
+        console.log(`Server running and DB initialized on port ${PORT}`);
+    });
+})();
