@@ -1,6 +1,8 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const path = require('path');
+// 引入同步 fs 用于启动时检测路径
+const fsSync = require('fs'); 
 const fs = require('fs').promises;
 const app = express();
 
@@ -13,9 +15,19 @@ const USERS = {
 };
 const ADMIN_USER = "libala"; // 定义管理员账号
 
-// --- 数据存储配置 ---
-const DATA_DIR = path.join(__dirname, 'data');
+// --- 数据存储配置 (关键修改) ---
+// Zeabur 挂载的硬盘路径通常是绝对路径 /app/data
+const MOUNT_PATH = '/app/data';
+
+// 判断逻辑：如果 /app/data 存在（说明在服务器且挂载成功），就用它。
+// 否则（说明在本地开发），使用当前目录下的 data 文件夹。
+const DATA_DIR = fsSync.existsSync(MOUNT_PATH) 
+    ? MOUNT_PATH 
+    : path.join(__dirname, 'data');
+
 const DB_FILE = path.join(DATA_DIR, 'database.json');
+
+console.log(`[System] Data storage path set to: ${DATA_DIR}`);
 
 // 默认预设 (初始化数据库时使用)
 const DEFAULT_PRESETS = [
@@ -26,10 +38,15 @@ const DEFAULT_PRESETS = [
 // --- 数据库操作封装 ---
 async function getDB() {
     try {
-        await fs.mkdir(DATA_DIR, { recursive: true });
+        // 确保目录存在
+        if (!fsSync.existsSync(DATA_DIR)) {
+             await fs.mkdir(DATA_DIR, { recursive: true });
+        }
+        
         const data = await fs.readFile(DB_FILE, 'utf8');
         return JSON.parse(data);
     } catch (e) {
+        console.log("[DB] Database not found or error, initializing new one...");
         // 如果文件不存在，初始化默认数据
         const initialDB = {
             presets: DEFAULT_PRESETS,
@@ -42,7 +59,13 @@ async function getDB() {
 }
 
 async function saveDB(data) {
-    await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+    try {
+        // 二次确保存储目录存在（防止运行中被删除）
+        await fs.mkdir(DATA_DIR, { recursive: true });
+        await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+    } catch (err) {
+        console.error("[DB Error] Failed to save database:", err);
+    }
 }
 
 app.use(express.json({ limit: '10mb' }));
@@ -161,15 +184,10 @@ app.post('/api/admin/preset', async (req, res) => {
     res.json({ success: true });
 });
 
-// app.get 和 app.listen 替换为异步启动块
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// --- 强制初始化数据库并启动 (已修改) ---
-(async () => {
-    // 确保数据库文件已创建或加载，然后才启动 HTTP 监听
-    await getDB(); 
-    
-    app.listen(PORT, () => {
-        console.log(`Server running and DB initialized on port ${PORT}`);
-    });
-})();
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Data Directory: ${DATA_DIR}`); // 打印路径方便调试
+});
+
