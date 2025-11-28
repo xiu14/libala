@@ -30,20 +30,28 @@ async function getDB() {
         const data = await fs.readFile(DB_FILE, 'utf8');
         return JSON.parse(data);
     } catch (e) {
-        // 如果文件不存在，初始化默认数据
+        // 如果文件不存在或格式错误，初始化默认数据
         const initialDB = {
             presets: DEFAULT_PRESETS,
-            usage: {}, // 格式: { username: { modelId: count } }
-            chats: {}  // 格式: { username: [sessions] }
+            usage: {}, 
+            chats: {}
         };
         await saveDB(initialDB);
         return initialDB;
     }
 }
 
+// --- 写入硬盘函数 (增加了日志诊断) ---
 async function saveDB(data) {
-    await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+    try {
+        await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+        console.log(`[SAVE SUCCESS] 数据库写入硬盘成功。文件路径: ${DB_FILE}`);
+    } catch (error) {
+        console.error(`[SAVE FAILED] 写入硬盘时发生严重错误: ${error.message}`);
+    }
 }
+// --- 写入硬盘函数结束 ---
+
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '.')));
@@ -59,17 +67,16 @@ app.post('/api/login', (req, res) => {
         res.json({ 
             success: true, 
             token: token,
-            isAdmin: username === ADMIN_USER // 告诉前端是不是管理员
+            isAdmin: username === ADMIN_USER
         });
     } else {
         res.status(401).json({ success: false, message: "账号或密码错误" });
     }
 });
 
-// 2. 获取配置 (所有用户可用，用于渲染侧边栏)
+// 2. 获取配置
 app.get('/api/config', async (req, res) => {
     const db = await getDB();
-    // 只返回前端需要的信息，隐藏 Key
     const safePresets = db.presets.map(p => ({
         id: p.id, name: p.name, desc: p.desc, icon: p.icon
     }));
@@ -82,7 +89,7 @@ app.post('/api/chat', async (req, res) => {
     const username = tokenMap.get(token);
     if (!username) return res.status(403).json({ error: { message: "登录已过期" } });
 
-    const { presetId, messages } = req.body; // 前端现在只传 presetId
+    const { presetId, messages } = req.body;
     
     const db = await getDB();
     const preset = db.presets.find(p => p.id === presetId);
@@ -96,7 +103,6 @@ app.post('/api/chat', async (req, res) => {
     await saveDB(db); // 保存统计数据
     // ----------------
 
-    // 构造 API 地址
     let apiUrl = preset.url;
     if (apiUrl.endsWith('/')) apiUrl = apiUrl.slice(0, -1);
     if (!apiUrl.includes('/chat/completions')) apiUrl += '/v1/chat/completions';
@@ -148,8 +154,7 @@ app.post('/api/admin/preset', async (req, res) => {
     const username = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (username !== ADMIN_USER) return res.status(403).json({ success: false, message: "无权访问" });
 
-    const newPreset = req.body; // { name, url, key, modelId, ... }
-    // 生成 ID 和 图标
+    const newPreset = req.body; 
     if(!newPreset.id) newPreset.id = 'model_' + Date.now();
     if(!newPreset.icon) newPreset.icon = '⚡';
     if(!newPreset.desc) newPreset.desc = 'Custom Model';
@@ -164,7 +169,7 @@ app.post('/api/admin/preset', async (req, res) => {
 // app.get 和 app.listen 替换为异步启动块
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// --- 强制初始化数据库并启动 (已修改) ---
+// --- 强制初始化数据库并启动 ---
 (async () => {
     // 确保数据库文件已创建或加载，然后才启动 HTTP 监听
     await getDB(); 
