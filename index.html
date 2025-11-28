@@ -4,28 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>👂🏻黎吧啦ai站👂🏻</title>
+    <!-- 引入 Markdown 解析器 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 引入 代码高亮 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- 引入 DOMPurify 防止 XSS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+
     <style>
         :root { --bg-color: #f8fafe; --chat-bg: #ffffff; --sidebar-bg: #ffffff; --text-color: #333333; --border-color: #ebedf0; --primary-color: #4f46e5; --my-msg-bg: #4f46e5; --my-msg-text: #ffffff; --ai-msg-bg: #f3f4f6; --ai-msg-text: #1f2937; --token-text: #9ca3af; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        [data-theme="dark"] { --bg-color: #111827; --chat-bg: #1f2937; --sidebar-bg: #1f2937; --text-color: #f3f4f6; --border-color: #374151; --primary-color: #6366f1; --my-msg-bg: #6366f1; --my-msg-text: #ffffff; --ai-msg-bg: #374151; --ai-msg-text: #f3f4f6; --token-text: #9ca3af; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); }
+        [data-theme="dark"] { --bg-color: #111827; --chat-bg: #1f2937; --sidebar-bg: #1f2937; --text-color: #f3f4f6; --border-color: #374151; --primary-color: #6366f1; --my-msg-bg: #6366f1; --my-msg-text: #ffffff; --ai-msg-bg: #374151; --ai-msg-text: #e5e7eb; --token-text: #9ca3af; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); }
         
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-color); color: var(--text-color); overflow: hidden; position: fixed; width: 100%; }
         
+        /* 登录页 */
         #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; }
         .login-box { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 40px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); width: 90%; max-width: 350px; text-align: center; color: #333 !important; }
         .login-title { font-size: 24px; font-weight: bold; margin-bottom: 20px; color: #333 !important; }
         .login-input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; outline:none; background: #fff; color: #333; }
         .login-btn { width: 100%; padding: 12px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; transition: opacity 0.2s; }
         
+        /* 主布局 */
         .app-container { display: none; height: 100%; position: relative; max-width: 1400px; margin: 0 auto; background: var(--chat-bg); box-shadow: var(--shadow); }
         @media (min-width: 1201px) { .app-container { height: 95vh; margin-top: 2.5vh; border-radius: 16px; overflow: hidden; } }
         
+        /* 侧边栏 */
         .sidebar { position: absolute; left: 0; top: 0; bottom: 0; width: 280px; background-color: var(--sidebar-bg); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; transform: translateX(-100%); transition: var(--transition); z-index: 50; box-shadow: 10px 0 30px rgba(0,0,0,0.1); }
         .sidebar-content { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
         .sidebar.open { transform: translateX(0); }
         .overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 40; }
         .overlay.show { display: block; }
         
+        /* 搜索框 */
+        .search-box { position: relative; margin-bottom: 10px; }
+        .search-input { width: 100%; padding: 8px 30px 8px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font-size: 14px; }
+        .search-icon { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--token-text); font-size: 14px; }
+        
+        /* 模式与会话列表 */
         .mode-list { display: grid; grid-template-columns: 1fr; gap: 8px; }
         .mode-card { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; background: var(--bg-color); border: 1px solid transparent; cursor: pointer; transition: all 0.2s; }
         .mode-card:hover { border-color: var(--primary-color); background: rgba(79, 70, 229, 0.05); }
@@ -43,49 +60,54 @@
         
         .sidebar-footer { padding: 15px; border-top: 1px solid var(--border-color); }
 
-        #adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
-        .admin-panel { background: var(--bg-color); width: 95%; max-width: 800px; height: 85vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
-        .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); }
-        .admin-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-        
-        /* 统计卡片样式优化 */
-        .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; }
-        .stat-card { background: var(--chat-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; }
-        .stat-user-title { font-weight: bold; font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; color: var(--primary-color); }
-        .stat-item { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px dashed var(--border-color); }
-        .stat-item:last-child { border-bottom: none; }
-        .stat-name { color: var(--text-color); }
-        .stat-count { font-weight: bold; }
-        
-        .preset-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: var(--chat-bg); border: 1px solid var(--border-color); margin-bottom: 8px; border-radius: 6px; }
-
+        /* 聊天主区域 */
         .main-chat { flex: 1; display: flex; flex-direction: column; background-color: var(--chat-bg); position: relative; width: 100%; }
         .chat-header { padding: 0 20px; height: 60px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background-color: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); z-index: 10; flex-shrink: 0; }
         [data-theme="dark"] .chat-header { background-color: rgba(31, 41, 55, 0.85); }
         
         #chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
         
-        .message { max-width: 85%; display: flex; flex-direction: column; gap: 4px; }
-        .user-msg { align-self: flex-end; align-items: flex-end; }
-        .ai-msg { align-self: flex-start; align-items: flex-start; }
+        /* 消息样式优化支持 Markdown */
+        .message { max-width: 90%; display: flex; flex-direction: column; gap: 4px; }
+        .user-msg { align-self: flex-end; align-items: flex-end; max-width: 85%; }
+        .ai-msg { align-self: flex-start; align-items: flex-start; width: 100%; max-width: 100%; }
+        
         .message-content { 
             padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.6; 
             box-shadow: 0 1px 2px rgba(0,0,0,0.05); word-wrap: break-word; overflow-wrap: break-word; 
-            max-width: 100%; 
-            white-space: pre-wrap; 
+            max-width: 100%; position: relative;
         }
-        .user-msg .message-content { background: var(--my-msg-bg); color: var(--my-msg-text); border-bottom-right-radius: 4px; }
-        .ai-msg .message-content { background: var(--ai-msg-bg); color: var(--ai-msg-text); border-bottom-left-radius: 4px; }
-        .message img { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; }
-        /* 时间戳样式 */
+        
+        /* 用户消息：纯文本，不需要 Markdown 渲染太复杂 */
+        .user-msg .message-content { background: var(--my-msg-bg); color: var(--my-msg-text); border-bottom-right-radius: 4px; white-space: pre-wrap; }
+        
+        /* AI 消息：Markdown 样式适配 */
+        .ai-msg .message-content { background: var(--ai-msg-bg); color: var(--ai-msg-text); border-bottom-left-radius: 4px; width: fit-content; max-width: 100%; overflow-x: auto; }
+        
+        /* Markdown 内部元素样式 */
+        .message-content p { margin: 0 0 10px 0; }
+        .message-content p:last-child { margin: 0; }
+        .message-content pre { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 10px 0; font-family: 'Consolas', monospace; font-size: 13px; }
+        .message-content code { background: rgba(150,150,150,0.2); padding: 2px 4px; border-radius: 4px; font-family: 'Consolas', monospace; font-size: 0.9em; }
+        .message-content pre code { background: transparent; padding: 0; color: inherit; }
+        .message-content ul, .message-content ol { margin: 8px 0; padding-left: 20px; }
+        .message-content li { margin: 4px 0; }
+        .message-content table { border-collapse: collapse; width: 100%; margin: 10px 0; display: block; overflow-x: auto; }
+        .message-content th, .message-content td { border: 1px solid var(--border-color); padding: 8px; text-align: left; }
+        .message-content th { background: rgba(0,0,0,0.05); }
+        .message-content blockquote { border-left: 4px solid var(--primary-color); margin: 8px 0; padding-left: 12px; color: var(--token-text); }
+        .message-content img { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; cursor: pointer; }
+
         .msg-time { font-size: 10px; color: var(--token-text); margin-top: 2px; padding: 0 2px; }
         
+        /* 输入区域 */
         .input-wrapper { padding: 15px 20px; background: var(--chat-bg); width: 100%; padding-bottom: max(15px, env(safe-area-inset-bottom)); flex-shrink: 0; }
         .input-container { display: flex; align-items: flex-end; gap: 8px; background: var(--bg-color); padding: 8px 10px; border-radius: 16px; border: 1px solid var(--border-color); width: 100%; transition: border-color 0.2s; }
         .input-container:focus-within { border-color: var(--primary-color); }
         textarea { flex: 1; width: 0; min-width: 0; background: transparent; border: none; outline: none; resize: none; color: var(--text-color); font-size: 16px; max-height: 150px; font-family: inherit; padding: 8px 0; line-height: 1.5; }
         .action-btn { width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer; background: transparent; color: var(--token-text); font-size: 20px; display:flex; align-items:center; justify-content:center; flex-shrink: 0; margin-bottom: 2px; }
-        .send-btn { background: var(--primary-color); color: white; border-radius: 12px; width: 40px; height: 40px; font-size: 16px; }
+        .send-btn { background: var(--primary-color); color: white; border-radius: 12px; width: 40px; height: 40px; font-size: 16px; transition: opacity 0.2s; }
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         #preview-area { display: flex; gap: 8px; padding-bottom: 10px; flex-wrap: wrap; }
         .preview-item { 
@@ -98,6 +120,22 @@
             border-radius: 50%; width: 18px; height: 18px; font-size: 12px; 
             display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 10;
         }
+
+        /* Admin Modal */
+        #adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
+        .admin-panel { background: var(--bg-color); width: 95%; max-width: 800px; height: 85vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+        .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); }
+        .admin-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+        
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; }
+        .stat-card { background: var(--chat-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; }
+        .stat-user-title { font-weight: bold; font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; color: var(--primary-color); }
+        .stat-item { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px dashed var(--border-color); }
+        .stat-item:last-child { border-bottom: none; }
+        .stat-name { color: var(--text-color); }
+        .stat-count { font-weight: bold; }
+        
+        .preset-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: var(--chat-bg); border: 1px solid var(--border-color); margin-bottom: 8px; border-radius: 6px; }
 
         @media (max-width: 768px) {
             .sidebar { width: 85%; max-width: 320px; }
@@ -124,28 +162,26 @@
         </div>
         <div class="admin-body">
             <div>
-                <h4 style="margin-bottom:10px; color:var(--primary-color);">📊 调用统计 (按用户)</h4>
+                <h4 style="margin-bottom:10px; color:var(--primary-color);">📊 调用统计</h4>
                 <div id="statGrid" class="stat-grid"></div>
             </div>
-            
             <div>
-                <h4 style="margin-bottom:10px; color:var(--primary-color);">🤖 模型预设管理</h4>
+                <h4 style="margin-bottom:10px; color:var(--primary-color);">🤖 模型预设</h4>
                 <div id="adminPresetList"></div>
-                
                 <div style="margin-top:15px; background:var(--ai-msg-bg); padding:15px; border-radius:8px;">
                     <div style="font-weight:bold; margin-bottom:10px;" id="addFormTitle">添加新预设</div>
                     <input type="hidden" id="addId">
-                    <input type="text" id="addName" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="显示名称 (如: DeepSeek)">
-                    <input type="text" id="addDesc" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="描述 (如: V3 Chat)">
+                    <input type="text" id="addName" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="显示名称">
+                    <input type="text" id="addDesc" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="描述">
                     <input type="text" id="addUrl" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="API Base URL">
                     <input type="text" id="addKey" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="API Key">
                     <input type="text" id="addModelId" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="Model ID">
                     <button class="login-btn" style="padding:8px;" onclick="savePreset()" id="savePresetBtn">添加预设</button>
-                    <button onclick="resetPresetForm()" style="margin-top:5px; padding:8px; background:transparent; border:none; color:var(--token-text); cursor:pointer;">重置表单</button>
+                    <button onclick="resetPresetForm()" style="margin-top:5px; padding:8px; background:transparent; border:none; color:var(--token-text); cursor:pointer;">重置</button>
                 </div>
                 <hr style="margin: 20px 0; border:0; border-top:1px solid var(--border-color);">
                 <div style="text-align:center;">
-                    <button onclick="forceMigrate()" style="background:#fee2e2; color:#ef4444; border:1px solid #ef4444; padding:8px 15px; border-radius:8px; cursor:pointer; font-size:12px;">⚠️ 从旧 database.json 导入数据 (若数据丢失请点此)</button>
+                    <button onclick="forceMigrate()" style="background:#fee2e2; color:#ef4444; border:1px solid #ef4444; padding:8px 15px; border-radius:8px; cursor:pointer; font-size:12px;">⚠️ 从旧 database.json 导入数据</button>
                 </div>
             </div>
         </div>
@@ -156,14 +192,31 @@
     <div class="overlay" onclick="toggleSidebar()"></div>
     <div class="sidebar" id="sidebar">
         <div class="sidebar-content">
-            <div style="font-size:12px; color:var(--token-text); margin-bottom:8px; font-weight:bold;">创建新会话</div>
-            <div class="mode-list" id="presetList"></div>
-            <div style="font-size:12px; color:var(--token-text); margin: 20px 0 8px 0; font-weight:bold; display:flex; justify-content:space-between;">
-                <span>历史会话</span>
-                <span id="sessionCount" style="font-weight:normal;">0/100</span>
+            <!-- 搜索栏 -->
+            <div class="search-box">
+                <input type="text" class="search-input" id="searchInput" placeholder="搜索聊天记录..." oninput="handleSearch(this.value)">
+                <span class="search-icon">🔍</span>
             </div>
-            <div class="session-list" id="sessionList"></div>
+
+            <!-- 常规列表容器 -->
+            <div id="normalSidebarList">
+                <div style="font-size:12px; color:var(--token-text); margin-bottom:8px; font-weight:bold;">创建新会话</div>
+                <div class="mode-list" id="presetList"></div>
+                
+                <div style="font-size:12px; color:var(--token-text); margin: 20px 0 8px 0; font-weight:bold; display:flex; justify-content:space-between;">
+                    <span>历史会话</span>
+                    <span id="sessionCount" style="font-weight:normal;">0/100</span>
+                </div>
+                <div class="session-list" id="sessionList"></div>
+            </div>
+
+            <!-- 搜索结果容器 -->
+            <div id="searchResultList" style="display:none;">
+                <div style="font-size:12px; color:var(--token-text); margin-bottom:8px; font-weight:bold;">搜索结果</div>
+                <div class="session-list" id="searchOutput"></div>
+            </div>
         </div>
+        
         <div class="sidebar-footer">
             <button id="adminBtn" onclick="openAdmin()" style="display:none; width:100%; padding:10px; margin-bottom:10px; background:var(--chat-bg); border:1px solid var(--border-color); border-radius:8px; color:var(--text-color); cursor:pointer;">⚙️ 管理后台</button>
             <button onclick="logout()" style="width:100%; padding:10px; background:#fee2e2; color:#ef4444; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">退出登录</button>
@@ -189,7 +242,7 @@
             <div class="input-container">
                 <input type="file" id="fileInput" accept="image/*,.json,.txt,.js,.md,.csv,.py" multiple style="display:none;" onchange="handleFileSelect(this)">
                 <button class="action-btn" onclick="document.getElementById('fileInput').click()" title="上传文件">📎</button>
-                <textarea id="userInput" placeholder="输入消息 (支持粘贴截图)..." rows="1" oninput="autoResize(this)"></textarea>
+                <textarea id="userInput" placeholder="输入消息 (支持 Markdown)..." rows="1" oninput="autoResize(this)"></textarea>
                 <button class="action-btn send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
             </div>
         </div>
@@ -203,6 +256,17 @@
     let uploadedFiles = []; 
     let authToken = localStorage.getItem('authToken');
     let isAdmin = localStorage.getItem('isAdmin') === 'true';
+
+    // 配置 Marked 和 Highlight
+    marked.setOptions({
+        highlight: function(code, lang) {
+            const language = highlight.getLanguage(lang) ? lang : 'plaintext';
+            return highlight.highlight(code, { language }).value;
+        },
+        langPrefix: 'hljs language-', // highlight.js css expects this
+        breaks: true, // 回车换行
+        gfm: true     // GitHub 风格
+    });
 
     window.onload = function() {
         const theme = localStorage.getItem('theme') || 'light';
@@ -239,6 +303,48 @@
         await fetchPresets(); await fetchSessions(); 
     }
 
+    // --- 搜索功能 ---
+    let searchTimeout;
+    async function handleSearch(query) {
+        clearTimeout(searchTimeout);
+        const normalList = document.getElementById('normalSidebarList');
+        const searchList = document.getElementById('searchResultList');
+        const output = document.getElementById('searchOutput');
+        
+        if (!query.trim()) {
+            normalList.style.display = 'block';
+            searchList.style.display = 'none';
+            return;
+        }
+
+        searchTimeout = setTimeout(async () => {
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+                const json = await res.json();
+                if (json.success) {
+                    normalList.style.display = 'none';
+                    searchList.style.display = 'block';
+                    output.innerHTML = '';
+                    if (json.data.length === 0) {
+                        output.innerHTML = '<div style="padding:10px; color:#999; text-align:center;">无结果</div>';
+                        return;
+                    }
+                    json.data.forEach(item => {
+                        // 简单的结果展示
+                        const preview = item.content.length > 30 ? item.content.substring(0, 30) + '...' : item.content;
+                        output.innerHTML += `
+                            <div class="session-item" onclick="loadSession('${item.session_id}')">
+                                <div>
+                                    <div style="font-weight:bold;">${item.session_title}</div>
+                                    <div style="font-size:12px; color:var(--token-text);">${item.role === 'user'?'👤':'🤖'} ${preview}</div>
+                                </div>
+                            </div>`;
+                    });
+                }
+            } catch(e) {}
+        }, 300); // 300ms 防抖
+    }
+
     async function fetchSessions() {
         try {
             const res = await fetch('/api/sessions', { headers: { 'Authorization': `Bearer ${authToken}` } });
@@ -252,6 +358,7 @@
                     const active = s.id === currentSessionId ? 'active' : '';
                     list.innerHTML += `<div class="session-item ${active}"><div class="session-title" onclick="loadSession('${s.id}')"><span style="margin-right:5px;">${preset?preset.icon:'💬'}</span> ${s.title}</div><div class="session-actions"><button class="sess-btn" onclick="renameSession('${s.id}', '${s.title}')">✎</button><button class="sess-btn del" onclick="deleteSession('${s.id}')">🗑</button></div></div>`;
                 });
+                // 仅当初次加载且没有当前会话时自动加载第一个
                 if (!currentSessionId && json.data.length > 0) loadSession(json.data[0].id);
             }
         } catch(e) {}
@@ -260,6 +367,12 @@
     async function loadSession(id) {
         if(isRequesting) return;
         currentSessionId = id;
+        
+        // 恢复侧边栏显示（如果是从搜索结果点击）
+        document.getElementById('searchInput').value = '';
+        document.getElementById('normalSidebarList').style.display = 'block';
+        document.getElementById('searchResultList').style.display = 'none';
+
         document.getElementById('chat-box').innerHTML = '<div style="text-align:center; padding:20px;">加载中...</div>';
         try {
             const res = await fetch(`/api/session/${id}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
@@ -268,18 +381,21 @@
                 document.getElementById('headerTitle').innerText = json.session.title;
                 const box = document.getElementById('chat-box'); box.innerHTML = '';
                 if (json.messages.length === 0) box.innerHTML = '<div style="text-align:center; padding:50px; color:var(--token-text);">开始新的对话...</div>';
+                
                 json.messages.forEach(msg => {
                     let text = ""; let imgs = [];
                     if (typeof msg.content === 'string') text = msg.content;
                     else {
                         msg.content.forEach(c => { if (c.type === 'text') text += c.text; if (c.type === 'image_url') imgs.push(c.image_url.url); });
                     }
-                    // 传递 timestamp
                     appendUI(null, msg.role, text, imgs, false, msg.timestamp);
                 });
+                
+                // 刷新列表以高亮当前
+                fetchSessions();
+                
                 if(window.innerWidth < 1000) { document.getElementById('sidebar').classList.remove('open'); document.querySelector('.overlay').classList.remove('show'); }
             }
-            fetchSessions();
         } catch(e) { document.getElementById('chat-box').innerHTML = "加载失败"; }
     }
 
@@ -290,26 +406,31 @@
     }
 
     async function renameSession(id, oldTitle) {
+        event.stopPropagation();
         const t = prompt("新标题", oldTitle);
         if (t && t !== oldTitle) {
             await fetch('/api/session/rename', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id, title: t }) });
             fetchSessions();
+            if(currentSessionId === id) document.getElementById('headerTitle').innerText = t;
         }
     }
 
     async function deleteSession(id) {
+        event.stopPropagation();
         if (!confirm("确定删除?")) return;
         await fetch('/api/session/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id }) });
         if(currentSessionId === id) { currentSessionId = null; document.getElementById('chat-box').innerHTML = ''; }
         fetchSessions();
     }
 
+    // --- 核心：流式发送消息 ---
     async function sendMessage() {
         if (isRequesting || !currentSessionId) return;
         const input = document.getElementById('userInput');
         const text = input.value.trim();
         if (!text && uploadedFiles.length === 0) return;
         
+        // 1. 构建消息体
         let payload = [];
         uploadedFiles.forEach(f => {
             if (f.type.startsWith('image/')) payload.push({ type: "image_url", image_url: { url: f.data } });
@@ -317,34 +438,104 @@
         });
         if (text) payload.push({ type: "text", text });
 
+        // 2. UI 立即上屏用户消息
         appendUI(null, "user", text + (uploadedFiles.length > 0 ? `\n(📎 ${uploadedFiles.length} 附件)` : ""), uploadedFiles.filter(f=>f.type.startsWith('image/')).map(f=>f.data), false, Date.now());
         
-        input.value = ''; uploadedFiles = []; renderPreviews(); isRequesting = true;
-        const sendBtn = document.getElementById('sendBtn'); sendBtn.disabled = true; sendBtn.style.opacity = '0.5';
-        const loadId = appendUI(null, "ai", "", [], true);
+        // 3. 清理输入框
+        input.value = ''; uploadedFiles = []; renderPreviews(); 
+        isRequesting = true;
+        const sendBtn = document.getElementById('sendBtn'); sendBtn.disabled = true;
+
+        // 4. 创建 AI 回复的占位气泡
+        const aiMsgId = appendUI(null, "ai", "", [], true); 
+        const aiContentDiv = document.querySelector(`#${aiMsgId} .message-content`);
+        let aiFullText = "";
 
         try {
+            // 获取当前会话上下文
             const sessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
             const sessData = await sessRes.json();
             let msgs = sessData.messages || [];
-            // 过滤掉 messages 里的 timestamp 字段再发给 AI，以免 AI 报错
+            
+            // 构造请求，过滤掉不必要的字段
             const cleanMsgs = msgs.map(m => ({ role: m.role, content: m.content }));
             cleanMsgs.push({ role: "user", content: payload });
 
-            const res = await fetch('/api/chat', {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+            // 5. 发起流式请求
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
                 body: JSON.stringify({ sessionId: currentSessionId, presetId: sessData.session.mode, messages: cleanMsgs })
             });
-            const data = await res.json();
-            document.getElementById(loadId).remove();
-            if (!res.ok) throw new Error(data.error?.message || "Error");
-            appendUI(null, "ai", data.choices[0].message.content, [], false, Date.now());
-            fetchSessions();
-        } catch (e) { document.getElementById(loadId).remove(); appendUI(null, "ai", "Error: " + e.message); }
-        finally { isRequesting = false; sendBtn.disabled = false; sendBtn.style.opacity = '1'; }
+
+            if (!response.ok) throw new Error("API Error");
+
+            // 6. 处理流
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                // SSE 格式通常是 "data: {...}"，后端为了简单透传可能直接是 raw chunk，
+                // 或者我们后端 server.js 里写的 res.write(chunk) 是混合的。
+                // 这里的处理逻辑适配 server.js 的透传逻辑。
+                
+                // 处理可能存在的 SSE 包装 (data: ...) 或直接 JSON
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.trim() === '') continue;
+                    if (line.startsWith('data: ')) {
+                         const dataStr = line.slice(6).trim();
+                         if (dataStr === '[DONE]') continue;
+                         try {
+                             const json = JSON.parse(dataStr);
+                             // 错误处理
+                             if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+                             // 获取增量内容
+                             const delta = json.choices?.[0]?.delta?.content || "";
+                             aiFullText += delta;
+                         } catch (e) { console.log("Parse error", e); }
+                    } else {
+                        // 兼容某些直接返回 raw text 的情况 (不常见但防守一下)
+                        try {
+                           const json = JSON.parse(line);
+                           if(json.choices) aiFullText += (json.choices[0].delta?.content || "");
+                        } catch(e) {}
+                    }
+                }
+
+                // 实时渲染 Markdown
+                // 使用 DOMPurify 净化 HTML 防止 XSS
+                aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+                
+                // 自动滚动到底部
+                const chatBox = document.getElementById('chat-box');
+                // 只有当用户接近底部时才自动滚动，防止看历史消息时被打断
+                if(chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 200) {
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            }
+            
+            // 流结束后，最后再渲染一次确保完整，并去掉可能的 loading 状态样式
+            aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+            // 添加时间戳 (本地估算)
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'msg-time';
+            timeDiv.innerText = formatTime(Date.now());
+            document.getElementById(aiMsgId).appendChild(timeDiv);
+
+            fetchSessions(); // 刷新侧边栏时间
+
+        } catch (e) {
+            aiContentDiv.innerHTML += `<br><span style="color:red">Error: ${e.message}</span>`;
+        } finally {
+            isRequesting = false; sendBtn.disabled = false;
+        }
     }
 
-    // 格式化时间函数
     function formatTime(ts) {
         if (!ts) return '';
         const date = new Date(ts);
@@ -362,18 +553,22 @@
         div.className = `message ${role === 'user' ? 'user-msg' : 'ai-msg'}`;
         div.id = id || ('msg-' + Date.now());
         
-        let content = `<div class="message-content">`;
-        if (images && images.length > 0) images.forEach(u => content += `<img src="${u}"><br>`);
-        if (isLoading) content += `<span style="color:#999">Thinking...</span>`;
-        else if (text) content += text;
-        content += `</div>`;
+        let contentHtml = "";
         
-        // 添加时间戳
-        if (timestamp) {
-            content += `<div class="msg-time">${formatTime(timestamp)}</div>`;
+        if (role === 'user') {
+            // 用户消息：简单转义HTML即可，不做Markdown
+            if (images && images.length > 0) images.forEach(u => contentHtml += `<img src="${u}"><br>`);
+            contentHtml += text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        } else {
+            // AI 消息：准备 Markdown 渲染容器
+            if (isLoading) contentHtml = `<span class="typing-indicator">Thinking...</span>`;
+            else contentHtml = DOMPurify.sanitize(marked.parse(text));
         }
+
+        let html = `<div class="message-content">${contentHtml}</div>`;
+        if (timestamp && !isLoading) html += `<div class="msg-time">${formatTime(timestamp)}</div>`;
         
-        div.innerHTML = content;
+        div.innerHTML = html;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
         return div.id;
@@ -402,7 +597,7 @@
     function renderPresetsSidebar() {
         const list = document.getElementById('presetList'); list.innerHTML = '';
         PRESETS.forEach(p => {
-            list.innerHTML += `<div class="mode-card" onclick="createNewSession('${p.id}')"><div class="mode-icon">${p.icon||'⚡'}</div><div class="mode-info"><div>${p.name}</div><div>${p.desc}</div></div></div>`;
+            list.innerHTML += `<div class="mode-card" onclick="createNewSession('${p.id}')"><div class="mode-icon">${p.icon||'⚡'}</div><div class="mode-info"><div>${p.name}</div><div style="font-size:10px;color:var(--token-text);">${p.desc}</div></div></div>`;
         });
     }
 
@@ -411,49 +606,27 @@
         const res = await fetch('/api/admin/data', { headers: { 'Authorization': `Bearer ${authToken}` } });
         const data = await res.json();
         
-        // 渲染统计 - 卡片式布局
         const grid = document.getElementById('statGrid');
         grid.innerHTML = '';
-        
         if (data.usage) {
             for (const [user, usage] of Object.entries(data.usage)) {
-                // 计算该用户总次数
-                let total = 0;
-                let listHtml = '';
+                let total = 0; let listHtml = '';
                 for (const [mid, count] of Object.entries(usage)) {
                     total += count;
-                    // 尝试匹配预设名字
                     const preset = PRESETS.find(p => p.id === mid);
-                    const displayName = preset ? `${preset.icon} ${preset.name}` : `<span style="color:#999;font-style:italic;">⚠️ 已删模型 (${mid.substring(0,6)}...)</span>`;
-                    
-                    listHtml += `
-                        <div class="stat-item">
-                            <span class="stat-name">${displayName}</span>
-                            <span class="stat-count">${count}</span>
-                        </div>
-                    `;
+                    const displayName = preset ? `${preset.icon} ${preset.name}` : `<span style="color:#999;font-style:italic;">${mid}</span>`;
+                    listHtml += `<div class="stat-item"><span class="stat-name">${displayName}</span><span class="stat-count">${count}</span></div>`;
                 }
-
-                const card = document.createElement('div');
-                card.className = 'stat-card';
-                card.innerHTML = `
-                    <div class="stat-user-title">
-                        <span>👤 ${user}</span>
-                        <span style="font-size:12px; background:#e0e7ff; color:var(--primary-color); padding:2px 8px; border-radius:10px;">共 ${total} 次</span>
-                    </div>
-                    <div>${listHtml}</div>
-                `;
-                grid.appendChild(card);
+                grid.innerHTML += `<div class="stat-card"><div class="stat-user-title"><span>👤 ${user}</span><span style="font-size:12px; background:#e0e7ff; color:var(--primary-color); padding:2px 8px; border-radius:10px;">共 ${total} 次</span></div><div>${listHtml}</div></div>`;
             }
         }
 
-        // 渲染预设列表 (保持不变)
         const pList = document.getElementById('adminPresetList'); pList.innerHTML = '';
         data.presets.forEach(p => {
             const presetJson = JSON.stringify(p).replace(/"/g, '&quot;');
             pList.innerHTML += `
                 <div class="preset-row">
-                    <div><strong>${p.name}</strong> <small>(${p.modelId})</small><div style="font-size:12px;color:#666;">${p.url}</div></div>
+                    <div><strong>${p.name}</strong> <small>(${p.modelId})</small></div>
                     <div>
                         <button onclick="editPreset('${presetJson}')" style="background:#e0f2f1; color:#00897b; border:none; padding:5px 10px; margin-right:5px; border-radius:4px; cursor:pointer;">编辑</button>
                         <button onclick="deletePreset('${p.id}')" style="background:#fee2e2; color:red; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
@@ -501,13 +674,11 @@
 
     async function forceMigrate() {
         if(!confirm("⚠️ 确定要从旧的 database.json 导入数据吗？")) return;
-        const btn = event.target; btn.disabled = true; btn.innerText = "导入中...";
         try {
             const res = await fetch('/api/admin/migrate', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } });
             const json = await res.json();
             alert(json.message); location.reload();
         } catch(e) { alert("导入失败: " + e.message); }
-        finally { btn.disabled = false; btn.innerText = "⚠️ 从旧 database.json 导入数据"; }
     }
 
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.querySelector('.overlay').classList.toggle('show'); }
@@ -515,5 +686,4 @@
 </script>
 </body>
 </html>
-
 
