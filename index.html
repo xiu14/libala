@@ -24,8 +24,8 @@
             --text-secondary: #64748b;
             --border-color: #e2e8f0; 
             
-            --primary-color: #475569; /* Slate-600 */
-            --primary-hover: #1e293b; /* Slate-800 */
+            --primary-color: #475569; 
+            --primary-hover: #1e293b; 
             
             --my-msg-bg: #475569; 
             --my-msg-text: #ffffff; 
@@ -39,20 +39,20 @@
         }
 
         [data-theme="dark"] { 
-            --bg-color: #020617; /* Slate-950 */
-            --chat-bg: #0f172a; /* Slate-900 */
+            --bg-color: #020617; 
+            --chat-bg: #0f172a; 
             --sidebar-bg: #020617; 
-            --text-color: #e2e8f0; /* Slate-200 */
-            --text-secondary: #94a3b8; /* Slate-400 */
-            --border-color: #1e293b; /* Slate-800 */
+            --text-color: #e2e8f0; 
+            --text-secondary: #94a3b8; 
+            --border-color: #1e293b; 
             
-            --primary-color: #cbd5e1; /* Slate-300 */
+            --primary-color: #cbd5e1; 
             --primary-hover: #ffffff;
             
-            --my-msg-bg: #334155; /* Slate-700 */
+            --my-msg-bg: #334155; 
             --my-msg-text: #f8fafc; 
             
-            --ai-msg-bg: #1e293b; /* Slate-800 */
+            --ai-msg-bg: #1e293b; 
             --ai-msg-text: #f1f5f9; 
             
             --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); 
@@ -206,10 +206,28 @@
         .remove-file { position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; opacity: 0; cursor: pointer; transition: opacity 0.2s; }
         .preview-item:hover .remove-file { opacity: 1; }
 
-        /* Admin */
-        #adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; }
-        .admin-panel { background: var(--chat-bg); width: 95%; max-width: 800px; height: 85vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); border: 1px solid var(--border-color); }
-        .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border-color); }
+        /* --- Admin & Modal Styles --- */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; }
+        .modal.open { display: flex; }
+        .modal-panel { background: var(--chat-bg); width: 95%; max-width: 800px; max-height: 85vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); border: 1px solid var(--border-color); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border-color); }
+        
+        /* 折叠面板样式 */
+        .accordion-item { border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 10px; overflow: hidden; background: var(--bg-color); }
+        .accordion-header { padding: 14px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 14px; background: var(--bg-color); transition: background 0.2s; }
+        .accordion-header:hover { background: rgba(0,0,0,0.02); }
+        .accordion-header i { transition: transform 0.2s; }
+        .accordion-item.active .accordion-header i { transform: rotate(180deg); }
+        .accordion-body { display: none; padding: 16px; border-top: 1px solid var(--border-color); background: var(--chat-bg); }
+        .accordion-item.active .accordion-body { display: block; }
+
+        /* 公告弹窗样式 */
+        .announce-content { 
+            line-height: 1.6; color: var(--text-color); font-size: 15px; 
+            max-height: 60vh; overflow-y: auto; padding: 20px;
+        }
+        .announce-content h1, .announce-content h2 { margin-top: 10px; font-size: 1.2em; }
+        .announce-content ul { padding-left: 20px; }
         
         @media (max-width: 768px) {
             .sidebar { width: 85%; max-width: 320px; }
@@ -222,50 +240,93 @@
 
 <div id="login-screen">
     <div class="login-box">
-        <div class="login-title"><i data-lucide="bot" style="width:32px; height:32px;"></i> AI Workspace</div>
+        <div class="login-title">👂🏻黎吧啦AI👂🏻</div>
         <input type="text" id="loginUser" class="login-input" placeholder="账号">
         <input type="password" id="loginPass" class="login-input" placeholder="密码">
         <button class="login-btn" onclick="handleLogin()">进入工作台</button>
     </div>
 </div>
 
-<div id="adminModal">
-    <div class="admin-panel">
-        <div class="admin-header">
+<!-- 公告弹窗 -->
+<div id="announceModal" class="modal">
+    <div class="modal-panel" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">📢 站点公告</h3>
+            <button class="icon-btn" onclick="document.getElementById('announceModal').classList.remove('open')"><i data-lucide="x"></i></button>
+        </div>
+        <div id="announceBody" class="announce-content"></div>
+        <div style="padding:16px; border-top:1px solid var(--border-color); text-align:right;">
+             <button class="login-btn" style="width:auto; padding:8px 24px;" onclick="closeAnnouncement()">知道了</button>
+        </div>
+    </div>
+</div>
+
+<!-- 管理后台 -->
+<div id="adminModal" class="modal">
+    <div class="modal-panel">
+        <div class="modal-header">
             <h3 style="margin:0; display:flex; align-items:center; gap:8px;"><i data-lucide="settings-2"></i> 管理后台</h3>
-            <button class="icon-btn" onclick="document.getElementById('adminModal').style.display='none'"><i data-lucide="x"></i></button>
+            <button class="icon-btn" onclick="document.getElementById('adminModal').classList.remove('open')"><i data-lucide="x"></i></button>
         </div>
         <div class="admin-body" style="flex:1; overflow-y:auto; padding:24px;">
-            <div style="margin-bottom:32px;">
-                <h4 style="margin-bottom:16px; color:var(--text-color); display:flex; align-items:center; gap:8px;"><i data-lucide="bar-chart-3"></i> 调用统计</h4>
-                <div id="statGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;"></div>
+            
+            <!-- 折叠 1: 发布公告 -->
+            <div class="accordion-item">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="megaphone"></i> 发布新公告</span>
+                    <i data-lucide="chevron-down"></i>
+                </div>
+                <div class="accordion-body">
+                    <div style="margin-bottom:10px; font-size:13px; color:var(--text-secondary);">支持 Markdown 格式。发布后用户下次登录时可见。</div>
+                    <textarea id="announceInput" class="login-input" style="height:100px; resize:vertical;" placeholder="请输入公告内容..."></textarea>
+                    <div style="text-align:right;">
+                        <button class="login-btn" style="width:auto; padding:8px 20px;" onclick="postAnnouncement()">发布公告</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 折叠 2: 数据统计 -->
+            <div class="accordion-item">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="bar-chart-3"></i> 调用统计</span>
+                    <i data-lucide="chevron-down"></i>
+                </div>
+                <div class="accordion-body">
+                    <div id="statGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;"></div>
+                </div>
             </div>
             
-            <div>
-                <h4 style="margin-bottom:16px; color:var(--text-color); display:flex; align-items:center; gap:8px;"><i data-lucide="cpu"></i> 模型预设</h4>
-                <div id="adminPresetList" style="margin-bottom:16px; display:flex; flex-direction:column; gap:8px;"></div>
-                
-                <div style="background:var(--bg-color); padding:20px; border-radius:12px; border:1px solid var(--border-color);">
-                    <div style="font-weight:600; margin-bottom:16px; font-size:14px;" id="addFormTitle">添加新预设</div>
-                    <input type="hidden" id="addId">
-                    <div style="display:grid; gap:12px;">
-                        <input type="text" id="addName" class="login-input" style="margin:0" placeholder="显示名称">
-                        <input type="text" id="addDesc" class="login-input" style="margin:0" placeholder="描述">
-                        <input type="text" id="addUrl" class="login-input" style="margin:0" placeholder="API Base URL">
-                        <input type="text" id="addKey" class="login-input" style="margin:0" placeholder="API Key">
-                        <input type="text" id="addModelId" class="login-input" style="margin:0" placeholder="Model ID">
-                        <div style="display:flex; gap:12px; margin-top:8px;">
-                            <button class="login-btn" style="flex:1;" onclick="savePreset()" id="savePresetBtn">保存配置</button>
-                            <button class="btn-ghost" style="width:auto; padding:0 20px; border-radius:12px; cursor:pointer;" onclick="resetPresetForm()">重置</button>
+            <!-- 折叠 3: 模型预设 -->
+            <div class="accordion-item">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="cpu"></i> 模型预设管理</span>
+                    <i data-lucide="chevron-down"></i>
+                </div>
+                <div class="accordion-body">
+                    <div id="adminPresetList" style="margin-bottom:16px; display:flex; flex-direction:column; gap:8px;"></div>
+                    
+                    <div style="background:var(--bg-color); padding:16px; border-radius:8px; border:1px solid var(--border-color); margin-top:16px;">
+                        <div style="font-weight:600; margin-bottom:12px; font-size:14px;" id="addFormTitle">添加新预设</div>
+                        <input type="hidden" id="addId">
+                        <div style="display:grid; gap:12px;">
+                            <input type="text" id="addName" class="login-input" style="margin:0" placeholder="显示名称 (如: DeepSeek)">
+                            <input type="text" id="addDesc" class="login-input" style="margin:0" placeholder="描述">
+                            <input type="text" id="addUrl" class="login-input" style="margin:0" placeholder="API Base URL">
+                            <input type="text" id="addKey" class="login-input" style="margin:0" placeholder="API Key">
+                            <input type="text" id="addModelId" class="login-input" style="margin:0" placeholder="Model ID">
+                            <div style="display:flex; gap:12px;">
+                                <button class="login-btn" style="flex:1;" onclick="savePreset()" id="savePresetBtn">保存配置</button>
+                                <button class="btn-ghost" style="width:auto; padding:0 20px; border-radius:12px;" onclick="resetPresetForm()">重置</button>
+                            </div>
                         </div>
                     </div>
                 </div>
-                
-                <div style="text-align:center; margin-top:40px;">
-                    <button class="btn-danger sidebar-btn" onclick="forceMigrate()" style="justify-content:center;">
-                        <i data-lucide="database-backup"></i> 从旧 database.json 导入数据
-                    </button>
-                </div>
+            </div>
+
+            <div style="text-align:center; margin-top:20px;">
+                <button class="btn-danger sidebar-btn" onclick="forceMigrate()" style="justify-content:center;">
+                    <i data-lucide="database-backup"></i> 从旧 database.json 导入数据
+                </button>
             </div>
         </div>
     </div>
@@ -306,6 +367,9 @@
         </div>
         
         <div class="sidebar-footer">
+            <button class="sidebar-btn btn-ghost" onclick="checkAnnouncement(true)">
+                <i data-lucide="bell"></i> 查看公告
+            </button>
             <button id="adminBtn" onclick="openAdmin()" class="sidebar-btn btn-ghost" style="display:none;">
                 <i data-lucide="settings"></i> 设置
             </button>
@@ -372,7 +436,7 @@
     window.onload = function() {
         const theme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', theme);
-        lucide.createIcons(); // Initialize Icons
+        lucide.createIcons();
         if (authToken) initApp();
         document.getElementById('userInput').addEventListener('keydown', (e) => {
             if(e.key === 'Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); sendMessage(); }
@@ -404,8 +468,63 @@
         if(isAdmin) document.getElementById('adminBtn').style.display = 'flex';
         await fetchPresets(); await fetchSessions(); 
         lucide.createIcons();
+        checkAnnouncement(false); // Check for new announcement
     }
 
+    // --- 公告系统 ---
+    let currentAnnounceTime = 0;
+
+    async function checkAnnouncement(forceShow) {
+        try {
+            const res = await fetch('/api/announcement', { headers: { 'Authorization': `Bearer ${authToken}` } });
+            const json = await res.json();
+            if (json.success && json.data) {
+                const { content, timestamp } = json.data;
+                currentAnnounceTime = timestamp;
+                const lastRead = localStorage.getItem('lastReadAnnounce');
+                
+                // 如果强制显示(点击按钮)，或者该公告比用户上次读的要新
+                if (forceShow || (!lastRead || parseInt(lastRead) < timestamp)) {
+                    document.getElementById('announceBody').innerHTML = DOMPurify.sanitize(marked.parse(content));
+                    document.getElementById('announceModal').classList.add('open');
+                }
+            } else if (forceShow) {
+                alert("暂无公告");
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    function closeAnnouncement() {
+        document.getElementById('announceModal').classList.remove('open');
+        // 记录已读时间
+        if (currentAnnounceTime > 0) {
+            localStorage.setItem('lastReadAnnounce', currentAnnounceTime);
+        }
+    }
+
+    async function postAnnouncement() {
+        const content = document.getElementById('announceInput').value;
+        if (!content.trim()) return alert("内容不能为空");
+        if (!confirm("确定发布此公告吗？所有用户下次登录将看到。")) return;
+        
+        await fetch('/api/admin/announcement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+            body: JSON.stringify({ content })
+        });
+        alert("发布成功");
+        document.getElementById('announceInput').value = '';
+    }
+
+    // --- 折叠面板逻辑 ---
+    function toggleAccordion(header) {
+        const item = header.parentElement;
+        // 关闭其他
+        // document.querySelectorAll('.accordion-item').forEach(i => { if(i!==item) i.classList.remove('active'); });
+        item.classList.toggle('active');
+    }
+
+    // --- 原有逻辑 ---
     let searchTimeout;
     async function handleSearch(query) {
         clearTimeout(searchTimeout);
@@ -446,7 +565,6 @@
         }, 300); 
     }
 
-    // --- 日期分组逻辑 ---
     function getDateLabel(ts) {
         const d = new Date(ts);
         const now = new Date();
@@ -468,7 +586,6 @@
                 container.innerHTML = '';
                 document.getElementById('sessionCount').innerText = `${json.data.length}`;
                 
-                // Grouping
                 const groups = { '今天': [], '昨天': [], '7天内': [], '更早': [] };
                 json.data.forEach(s => {
                     const label = getDateLabel(s.updated_at);
@@ -533,7 +650,7 @@
                 });
                 
                 fetchSessions(); // Update Active State
-                lucide.createIcons(); // Re-render icons for empty state
+                lucide.createIcons();
                 if(window.innerWidth < 1000) { document.getElementById('sidebar').classList.remove('open'); document.querySelector('.overlay').classList.remove('show'); }
             }
         } catch(e) { document.getElementById('chat-box').innerHTML = "加载失败"; }
@@ -672,7 +789,6 @@
             else contentHtml = DOMPurify.sanitize(marked.parse(text));
         }
         
-        // Avatar logic (can be replaced with icons)
         const avatarIcon = role === 'user' ? 'user' : 'bot';
         
         let html = `
@@ -688,7 +804,7 @@
         div.innerHTML = html;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
-        lucide.createIcons({ root: div }); // Render icons for new message
+        lucide.createIcons({ root: div }); 
         return div.id;
     }
 
@@ -735,7 +851,7 @@
     }
 
     async function openAdmin() {
-        document.getElementById('adminModal').style.display = 'flex';
+        document.getElementById('adminModal').classList.add('open');
         const res = await fetch('/api/admin/data', { headers: { 'Authorization': `Bearer ${authToken}` } });
         const data = await res.json();
         
@@ -778,6 +894,13 @@
         document.getElementById('addModelId').value = p.modelId;
         document.getElementById('addFormTitle').innerText = "编辑预设: " + p.name;
         document.getElementById('savePresetBtn').innerText = "保存";
+        
+        // Auto expand preset accordion
+        const accordions = document.querySelectorAll('.accordion-item');
+        if (accordions.length > 2) {
+             accordions.forEach(i => i.classList.remove('active'));
+             accordions[2].classList.add('active'); // Open preset panel
+        }
     }
 
     function resetPresetForm() {
