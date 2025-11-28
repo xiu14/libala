@@ -10,7 +10,6 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-color); color: var(--text-color); overflow: hidden; position: fixed; width: 100%; }
         
-        /* Login & Sidebar Styles (Unchanged) */
         #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; }
         .login-box { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); padding: 40px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); width: 90%; max-width: 350px; text-align: center; }
         .login-input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; outline:none;}
@@ -36,20 +35,18 @@
         .session-item.active { background: rgba(79, 70, 229, 0.1); color: var(--primary-color); font-weight: 600; }
         .session-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #eee; color: #666; margin-right: 8px;}
 
-        /* --- 修复 Admin Button 颜色 --- */
+        /* Admin Button Fixed Color */
         #adminBtn { 
             display: none; 
-            background: var(--primary-color); /* 使用主题主色 */
-            color: white; /* 确保文字是白色 */
+            background: var(--primary-color); 
+            color: white; 
             margin-bottom: 10px; 
-            box-shadow: var(--shadow); /* 增加阴影，使其浮起 */
+            box-shadow: var(--shadow);
         } 
-        /* --- 修复 Admin Button 颜色 --- */
 
         .collapse-header { cursor: pointer; margin: 0 0 10px 0; font-size: 14px; color: var(--primary-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.03); padding: 10px; border-radius: 8px;}
         .collapse-header:hover { background: rgba(0,0,0,0.06); }
 
-        /* Chat Area Styles (Unchanged) */
         .main-chat { flex: 1; display: flex; flex-direction: column; background-color: var(--chat-bg); position: relative; width: 100%; }
         .chat-header { padding: 0 20px; height: 60px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background-color: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); z-index: 10; }
         [data-theme="dark"] .chat-header { background-color: rgba(31, 41, 55, 0.8); }
@@ -59,17 +56,15 @@
         .user-msg { align-self: flex-end; align-items: flex-end; }
         .ai-msg { align-self: flex-start; align-items: flex-start; }
         .message-content { padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.6; box-shadow: 0 1px 2px rgba(0,0,0,0.05); word-wrap: break-word; overflow-wrap: break-word;}
-        .message img { max-width: 100%; border-radius: 8px; margin-top: 8px; }
+        .message img { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; }
         .message pre { margin: 0; white-space: pre-wrap; font-family: inherit; overflow-x: auto; }
 
-        /* Input and Preview Area Styles */
         .input-wrapper { padding: 15px 20px; background: var(--chat-bg); width: 100%; padding-bottom: max(15px, env(safe-area-inset-bottom)); }
         .input-container { display: flex; align-items: flex-end; gap: 8px; background: var(--bg-color); padding: 8px 10px; border-radius: 16px; border: 1px solid var(--border-color); width: 100%; box-sizing: border-box; }
         textarea { flex: 1; width: 0; min-width: 0; background: transparent; border: none; outline: none; resize: none; color: var(--text-color); font-size: 16px; max-height: 120px; font-family: inherit; padding: 8px 0; line-height: 1.4; }
         .action-btn { width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer; background: transparent; color: var(--token-text); font-size: 20px; display:flex; align-items:center; justify-content:center; flex-shrink: 0; margin-bottom: 2px; }
         .send-btn { background: var(--primary-color); color: white; border-radius: 12px; width: 40px; height: 40px; font-size: 16px; }
 
-        /* Multi-file Preview List */
         #preview-area { display: flex; gap: 8px; padding-bottom: 10px; flex-wrap: wrap; }
         .preview-item { 
             width: 60px; height: 60px; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid #ddd; 
@@ -88,7 +83,6 @@
             cursor: pointer; z-index: 10;
         }
 
-        /* Admin Modal Styles (Unchanged) */
         #adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
         .admin-panel { background: var(--bg-color); width: 90%; max-width: 500px; max-height: 80vh; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; overflow: hidden; }
         .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -189,19 +183,14 @@
     let sessions = [];
     let currentSessionId = null;
     let isRequesting = false;
-    
-    // --- 关键修改：多文件状态管理 ---
-    let uploadedFiles = []; // 存储所有上传文件的对象数组: [{name, type, data}, ...]
-    // ----------------------------
+    let uploadedFiles = []; 
 
     let authToken = localStorage.getItem('authToken');
     let isAdmin = localStorage.getItem('isAdmin') === 'true';
 
     window.onload = function() {
-        // --- 深色模式记住逻辑 (已确认正确) ---
         const theme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', theme);
-        // --- 深色模式记住逻辑 (已确认正确) ---
 
         if (authToken) initApp();
         
@@ -210,7 +199,6 @@
         });
     };
 
-    // --- 文件上传及预览函数 (大改动) ---
     function getFileIcon(fileName) {
         const ext = fileName.split('.').pop().toLowerCase();
         if (['json', 'js', 'py', 'md', 'html', 'css'].includes(ext)) return '💻';
@@ -222,7 +210,6 @@
     function renderPreviews() {
         const previewArea = document.getElementById('preview-area');
         previewArea.innerHTML = '';
-        
         uploadedFiles.forEach((file, index) => {
             let content;
             if (file.type.startsWith('image/')) {
@@ -231,13 +218,7 @@
                 const icon = getFileIcon(file.name);
                 content = `<div class="file-icon">${icon}</div><div class="file-name-small">${file.name}</div>`;
             }
-            
-            previewArea.innerHTML += `
-                <div class="preview-item">
-                    ${content}
-                    <div class="remove-file" onclick="removeFile(${index})">×</div>
-                </div>
-            `;
+            previewArea.innerHTML += `<div class="preview-item">${content}<div class="remove-file" onclick="removeFile(${index})">×</div></div>`;
         });
     }
 
@@ -246,42 +227,25 @@
         renderPreviews();
     }
     
-    // 主文件选择逻辑
     function handleFileSelect(input) {
         if (!input.files.length) return;
-        
-        // 使用 Promise.all 等待所有文件读取完成
         const filePromises = Array.from(input.files).map(file => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    resolve({
-                        name: file.name,
-                        type: file.type,
-                        // Data is base64 for images, raw text for others
-                        data: e.target.result 
-                    });
+                    resolve({ name: file.name, type: file.type, data: e.target.result });
                 };
-
-                if (file.type.startsWith('image/')) {
-                    reader.readAsDataURL(file); // 读取图片为Base64
-                } else {
-                    reader.readAsText(file);    // 读取文本内容
-                }
+                if (file.type.startsWith('image/')) { reader.readAsDataURL(file); } 
+                else { reader.readAsText(file); }
             });
         });
-
         Promise.all(filePromises).then(newFiles => {
             uploadedFiles = uploadedFiles.concat(newFiles);
             renderPreviews();
         });
-        
-        input.value = ''; // 清空 input 缓存
+        input.value = '';
     }
-    // --- 文件上传及预览函数 (结束) ---
 
-
-    // --- 登录/初始化逻辑 (基本不变) ---
     async function handleLogin() {
         const u = document.getElementById('loginUser').value.trim();
         const p = document.getElementById('loginPass').value.trim();
@@ -310,78 +274,44 @@
     async function initApp() {
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('app').style.display = 'flex';
-        
         if(isAdmin) document.getElementById('adminBtn').style.display = 'flex';
-
         await fetchPresets(); 
         await fetchHistory(); 
     }
     
-    async function fetchPresets() { /* ... function body ... */ }
-    function renderPresets() { /* ... function body ... */ }
-    async function fetchHistory() { /* ... function body ... */ }
-    async function saveHistory() { /* ... function body ... */ }
-    function startNewSession(presetId) { /* ... function body ... */ }
-    function loadSession(id) { /* ... function body ... */ }
-    function renderSessionList() { /* ... function body ... */ }
-    // --- 登录/初始化逻辑 (基本不变) ---
-
-
-    // --- 核心发送逻辑 (大改动) ---
     async function sendMessage() {
         if (isRequesting) return;
         const input = document.getElementById('userInput');
         const text = input.value.trim();
-        
-        // 检查：必须有文本，或者有附件
         if (!text && uploadedFiles.length === 0) return;
         
         const session = sessions.find(s => s.id === currentSessionId);
         if (!session) return;
 
-        // --- 1. 构造多模态 Payload ---
         let msgPayload = [];
         let combinedText = text;
-        
         uploadedFiles.forEach(file => {
             if (file.type.startsWith('image/')) {
-                // 1a. 添加图片部分
-                msgPayload.push({ 
-                    type: "image_url", 
-                    image_url: { url: file.data } // data是base64
-                });
+                msgPayload.push({ type: "image_url", image_url: { url: file.data } });
             } else {
-                // 1b. 将文本文件内容追加到主文本中
                 combinedText += `\n\n[文件 ${file.name} 内容如下]:\n\`\`\`\n${file.data}\n\`\`\``;
             }
         });
+        msgPayload.push({ type: "text", text: combinedText || "附件分析" });
 
-        // 1c. 添加最终的文本部分 (必须包含用户输入的prompt和所有文本文件内容)
-        msgPayload.push({
-            type: "text",
-            text: combinedText || "请分析我上传的附件"
-        });
-
-        // 优化：如果只有文本内容，API 接受 string 格式，但为了简化，统一发数组
-        // let finalPayload = msgPayload.length === 1 && msgPayload[0].type === 'text' ? combinedText : msgPayload;
-        let finalPayload = msgPayload; 
-        
-        // --- 2. UI 更新及状态清理 ---
         let uiText = text;
         if(uploadedFiles.length > 0) uiText += `\n(📎 已附带 ${uploadedFiles.length} 个文件)`;
 
-        appendUI(null, "user", uiText);
-        session.messages.push({ role: "user", content: finalPayload }); // 保存数组格式
+        appendUI(null, "user", uiText); 
+        session.messages.push({ role: "user", content: msgPayload });
 
         input.value = ''; input.style.height = 'auto'; 
-        uploadedFiles = []; // 清空多文件数组
-        renderPreviews(); // 刷新预览区
+        uploadedFiles = []; renderPreviews();
 
-        // --- 3. API 调用 ---
         isRequesting = true;
         const sendBtn = document.getElementById('sendBtn');
         sendBtn.disabled = true; sendBtn.style.opacity = '0.6';
-        const loadingId = appendUI(null, "ai", "Thinking...", null, true);
+        const loadingId = appendUI(null, "ai", "Thinking...", [], true);
 
         try {
             const res = await fetch('/api/chat', {
@@ -404,10 +334,7 @@
             isRequesting = false; sendBtn.disabled = false; sendBtn.style.opacity = '1'; input.focus();
         }
     }
-    // --- 核心发送逻辑 (结束) ---
 
-
-    // --- 辅助功能 (基本不变) ---
     async function fetchPresets() {
         try {
             const res = await fetch('/api/config');
@@ -415,11 +342,8 @@
             if (data.success) {
                 PRESETS = data.presets;
                 renderPresets();
-                if (currentSessionId === null && PRESETS.length > 0) {
-                    startNewSession(PRESETS[0].id);
-                }
             }
-        } catch(e) { console.error("获取配置失败", e); }
+        } catch(e) { console.error(e); }
     }
     function renderPresets() {
         const list = document.getElementById('presetList');
@@ -440,20 +364,17 @@
             if (data.success) {
                 sessions = data.data;
                 renderSessionList();
-                if (sessions.length > 0) {
-                    loadSession(sessions[0].id);
-                }
+                if (sessions.length > 0) loadSession(sessions[0].id);
+                else if(PRESETS.length > 0) startNewSession(PRESETS[0].id);
             }
-        } catch(e) { console.error("获取历史失败", e); }
+        } catch(e) { console.error(e); }
     }
     async function saveHistory() {
-        try {
-            await fetch('/api/history', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-                body: JSON.stringify({ sessions: sessions })
-            });
-        } catch(e) { console.error("保存历史失败", e); }
+        await fetch('/api/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+            body: JSON.stringify({ sessions: sessions })
+        });
     }
 
     function startNewSession(presetId) {
@@ -468,8 +389,10 @@
         renderSessionList();
         loadSession(newSession.id);
         saveHistory();
-        toggleSidebar();
+        if(window.innerWidth < 1000) toggleSidebar();
     }
+
+    // --- 关键修复: 兼容旧数据和多文件数据的渲染 ---
     function loadSession(id) {
         const session = sessions.find(s => s.id === id);
         if (!session) return;
@@ -480,17 +403,32 @@
 
         const box = document.getElementById('chat-box');
         box.innerHTML = '';
-        session.messages.forEach(msg => {
-            // 注意: 多模态内容可能需要更复杂的渲染逻辑
-            let contentText = typeof msg.content === 'string' 
-                ? msg.content 
-                : (msg.content.find(item => item.type === 'text')?.text || "（多媒体消息）");
-            
-            appendUI(null, msg.role, contentText);
-        });
-        
+
+        if (session.messages.length === 0) {
+            appendUI(null, "ai", `👋 已创建新窗口 (${preset ? preset.name : 'Chat'})`);
+        } else {
+            session.messages.forEach(msg => {
+                let contentText = "";
+                let images = [];
+
+                if (typeof msg.content === 'string') {
+                    contentText = msg.content;
+                } else if (Array.isArray(msg.content)) {
+                    // 提取所有文本部分
+                    const textParts = msg.content.filter(c => c.type === 'text');
+                    contentText = textParts.map(c => c.text).join('\n');
+                    
+                    // 提取所有图片部分
+                    const imgParts = msg.content.filter(c => c.type === 'image_url');
+                    images = imgParts.map(c => c.image_url.url);
+                }
+
+                appendUI(null, msg.role, contentText, images);
+            });
+        }
         renderSessionList();
     }
+
     function renderSessionList() {
         const list = document.getElementById('sessionList');
         list.innerHTML = '';
@@ -502,12 +440,10 @@
         });
     }
 
-    // 管理员功能
-    async function openAdmin() {
+    async function openAdmin() { /* ... admin logic unchanged ... */ 
         document.getElementById('adminModal').style.display = 'flex';
         document.getElementById('addPresetForm').style.display = 'none';
         document.getElementById('collapseIcon').innerText = '▼';
-        
         const res = await fetch('/api/admin/data', { headers: { 'Authorization': `Bearer ${authToken}` } });
         const data = await res.json();
         if(data.success) {
@@ -525,47 +461,39 @@
     function toggleAddPreset() {
         const form = document.getElementById('addPresetForm');
         const icon = document.getElementById('collapseIcon');
-        if (form.style.display === 'none') {
-            form.style.display = 'block';
-            icon.innerText = '▲';
-        } else {
-            form.style.display = 'none';
-            icon.innerText = '▼';
-        }
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        icon.innerText = form.style.display === 'block' ? '▲' : '▼';
     }
-    async function addPreset() {
+    async function addPreset() { /* ... add preset logic unchanged ... */ 
         const name = document.getElementById('addName').value;
         const url = document.getElementById('addUrl').value;
         const key = document.getElementById('addKey').value;
         const modelId = document.getElementById('addModelId').value;
         const desc = document.getElementById('addDesc').value;
-
         if(!name || !url || !key || !modelId) return alert("请填写完整");
-
-        const res = await fetch('/api/admin/preset', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-            body: JSON.stringify({ name, url, key, modelId, desc })
-        });
-        
-        if(res.ok) {
-            alert("添加成功");
-            toggleAddPreset();
-            fetchPresets();
-        } else {
-            alert("添加失败");
-        }
+        const res = await fetch('/api/admin/preset', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ name, url, key, modelId, desc }) });
+        if(res.ok) { alert("添加成功"); toggleAddPreset(); fetchPresets(); } else { alert("添加失败"); }
     }
 
-
-    function appendUI(id, role, text, img, isLoading) {
+    // --- 修复: AppendUI 现在支持多图片数组 ---
+    function appendUI(id, role, text, images = [], isLoading = false) {
         const box = document.getElementById('chat-box');
         const div = document.createElement('div');
         div.className = `message ${role === 'user' ? 'user-msg' : 'ai-msg'}`;
         div.id = id || ('msg-' + Date.now());
+        
         let content = `<div class="message-content">`;
+        
+        // 渲染多张图片
+        if (images && images.length > 0) {
+            images.forEach(imgUrl => {
+                content += `<img src="${imgUrl}"><br>`;
+            });
+        }
+        
         if (isLoading) content += `<span style="color:#999">Thinking...</span>`;
-        else content += `<pre>${text || ''}</pre>`;
+        else if (text) content += `<pre>${text}</pre>`;
+        
         content += `</div>`;
         div.innerHTML = content;
         box.appendChild(div);
@@ -578,7 +506,7 @@
     function toggleTheme() { 
         const n = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; 
         document.documentElement.setAttribute('data-theme', n); 
-        localStorage.setItem('theme', n); // 记住深色模式的选择
+        localStorage.setItem('theme', n); 
     }
 </script>
 </body>
