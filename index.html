@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>👂🏻黎吧啦ai站👂🏻</title>
+    <title>AI Workspace</title>
     <!-- 引入 Markdown 解析器 -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- 引入 代码高亮 -->
@@ -11,217 +11,260 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <!-- 引入 DOMPurify 防止 XSS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+    <!-- 引入 Lucide 图标库 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
-        :root { --bg-color: #f8fafe; --chat-bg: #ffffff; --sidebar-bg: #ffffff; --text-color: #333333; --border-color: #ebedf0; --primary-color: #4f46e5; --my-msg-bg: #4f46e5; --my-msg-text: #ffffff; --ai-msg-bg: #f3f4f6; --ai-msg-text: #1f2937; --token-text: #9ca3af; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        [data-theme="dark"] { --bg-color: #111827; --chat-bg: #1f2937; --sidebar-bg: #1f2937; --text-color: #f3f4f6; --border-color: #374151; --primary-color: #6366f1; --my-msg-bg: #6366f1; --my-msg-text: #ffffff; --ai-msg-bg: #374151; --ai-msg-text: #e5e7eb; --token-text: #9ca3af; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); }
+        /* Slate Color Palette */
+        :root { 
+            --bg-color: #f8fafc; 
+            --chat-bg: #ffffff; 
+            --sidebar-bg: #f1f5f9; 
+            --text-color: #334155; 
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0; 
+            
+            --primary-color: #475569; /* Slate-600 */
+            --primary-hover: #1e293b; /* Slate-800 */
+            
+            --my-msg-bg: #475569; 
+            --my-msg-text: #ffffff; 
+            
+            --ai-msg-bg: #f1f5f9; 
+            --ai-msg-text: #1e293b; 
+            
+            --danger-color: #ef4444;
+            --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+
+        [data-theme="dark"] { 
+            --bg-color: #020617; /* Slate-950 */
+            --chat-bg: #0f172a; /* Slate-900 */
+            --sidebar-bg: #020617; 
+            --text-color: #e2e8f0; /* Slate-200 */
+            --text-secondary: #94a3b8; /* Slate-400 */
+            --border-color: #1e293b; /* Slate-800 */
+            
+            --primary-color: #cbd5e1; /* Slate-300 */
+            --primary-hover: #ffffff;
+            
+            --my-msg-bg: #334155; /* Slate-700 */
+            --my-msg-text: #f8fafc; 
+            
+            --ai-msg-bg: #1e293b; /* Slate-800 */
+            --ai-msg-text: #f1f5f9; 
+            
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); 
+        }
         
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-color); color: var(--text-color); overflow: hidden; position: fixed; width: 100%; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: var(--bg-color); color: var(--text-color); overflow: hidden; position: fixed; width: 100%; }
         
+        /* 通用按钮样式 */
+        .icon-btn { 
+            background: transparent; border: none; cursor: pointer; color: var(--text-secondary); 
+            padding: 8px; border-radius: 6px; transition: var(--transition); display: flex; align-items: center; justify-content: center; 
+        }
+        .icon-btn:hover { background: rgba(0,0,0,0.05); color: var(--text-color); }
+        [data-theme="dark"] .icon-btn:hover { background: rgba(255,255,255,0.1); }
+
         /* 登录页 */
-        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; }
-        .login-box { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 40px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); width: 90%; max-width: 350px; text-align: center; color: #333 !important; }
-        .login-title { font-size: 24px; font-weight: bold; margin-bottom: 20px; color: #333 !important; }
-        .login-input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; outline:none; background: #fff; color: #333; }
-        .login-btn { width: 100%; padding: 12px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; transition: opacity 0.2s; }
+        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; }
+        .login-box { background: var(--chat-bg); padding: 40px; border-radius: 24px; border: 1px solid var(--border-color); width: 90%; max-width: 360px; text-align: center; box-shadow: var(--shadow); }
+        .login-title { font-size: 24px; font-weight: 600; margin-bottom: 24px; color: var(--text-color); display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .login-input { width: 100%; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--border-color); border-radius: 12px; font-size: 15px; background: var(--bg-color); color: var(--text-color); transition: border-color 0.2s; }
+        .login-input:focus { border-color: var(--text-secondary); }
+        .login-btn { width: 100%; padding: 12px; background: var(--text-color); color: var(--chat-bg); border: none; border-radius: 12px; font-weight: 600; cursor: pointer; font-size: 15px; margin-top: 8px; }
         
         /* 主布局 */
-        .app-container { display: none; height: 100%; position: relative; max-width: 1400px; margin: 0 auto; background: var(--chat-bg); box-shadow: var(--shadow); }
-        @media (min-width: 1201px) { .app-container { height: 95vh; margin-top: 2.5vh; border-radius: 16px; overflow: hidden; } }
+        .app-container { display: none; height: 100%; position: relative; max-width: 1600px; margin: 0 auto; background: var(--chat-bg); box-shadow: var(--shadow); }
+        @media (min-width: 1201px) { .app-container { height: 96vh; margin-top: 2vh; border-radius: 20px; border: 1px solid var(--border-color); overflow: hidden; } }
         
         /* 侧边栏 */
-        .sidebar { position: absolute; left: 0; top: 0; bottom: 0; width: 280px; background-color: var(--sidebar-bg); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; transform: translateX(-100%); transition: var(--transition); z-index: 50; box-shadow: 10px 0 30px rgba(0,0,0,0.1); }
-        .sidebar-content { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .sidebar { position: absolute; left: 0; top: 0; bottom: 0; width: 300px; background-color: var(--sidebar-bg); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; transform: translateX(-100%); transition: var(--transition); z-index: 50; }
+        .sidebar-content { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px; }
         .sidebar.open { transform: translateX(0); }
-        .overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 40; }
+        .overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.2); backdrop-filter: blur(2px); z-index: 40; }
         .overlay.show { display: block; }
         
         /* 搜索框 */
-        .search-box { position: relative; margin-bottom: 10px; }
-        .search-input { width: 100%; padding: 8px 30px 8px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font-size: 14px; }
-        .search-icon { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--token-text); font-size: 14px; }
+        .search-box { position: relative; }
+        .search-input { width: 100%; padding: 10px 36px 10px 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--chat-bg); color: var(--text-color); font-size: 14px; transition: all 0.2s; }
+        .search-input:focus { border-color: var(--text-secondary); box-shadow: 0 0 0 2px rgba(100,116,139,0.1); }
+        .search-icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); width: 16px; height: 16px; }
         
-        /* 模式与会话列表 */
-        .mode-list { display: grid; grid-template-columns: 1fr; gap: 8px; }
-        .mode-card { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; background: var(--bg-color); border: 1px solid transparent; cursor: pointer; transition: all 0.2s; }
-        .mode-card:hover { border-color: var(--primary-color); background: rgba(79, 70, 229, 0.05); }
-        .mode-icon { font-size: 20px; width: 30px; text-align: center;}
+        /* 模式列表 */
+        .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; padding-left: 4px; }
         
-        .session-list { display: flex; flex-direction: column; gap: 6px; margin-top: 5px; }
-        .session-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: space-between; color: var(--text-color); transition: background 0.2s; position: relative; }
+        .mode-list { display: grid; grid-template-columns: 1fr; gap: 6px; }
+        .mode-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--chat-bg); border: 1px solid var(--border-color); cursor: pointer; transition: all 0.2s; }
+        .mode-card:hover { border-color: var(--text-secondary); transform: translateY(-1px); }
+        .mode-icon { font-size: 18px; width: 24px; text-align: center; }
+        .mode-info div:first-child { font-size: 14px; font-weight: 500; }
+        .mode-info div:last-child { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+        
+        /* 会话分组列表 */
+        .session-group { margin-bottom: 20px; }
+        .group-header { font-size: 11px; color: var(--text-secondary); margin: 0 0 6px 8px; font-weight: 600; }
+        .session-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: space-between; color: var(--text-color); transition: background 0.2s; margin-bottom: 2px; }
         .session-item:hover { background: rgba(0,0,0,0.03); }
-        .session-item.active { background: rgba(79, 70, 229, 0.1); color: var(--primary-color); font-weight: 600; }
-        .session-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px; }
-        .session-actions { display: none; gap: 4px; }
+        [data-theme="dark"] .session-item:hover { background: rgba(255,255,255,0.03); }
+        .session-item.active { background: var(--chat-bg); color: var(--text-color); font-weight: 600; border: 1px solid var(--border-color); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .session-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px; display: flex; align-items: center; gap: 8px; }
+        .session-actions { display: none; gap: 2px; }
         .session-item:hover .session-actions, .session-item.active .session-actions { display: flex; }
-        .sess-btn { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; font-size: 12px; background: transparent; color: var(--token-text); }
-        .sess-btn:hover { background: rgba(0,0,0,0.1); color: var(--text-color); }
         
-        .sidebar-footer { padding: 15px; border-top: 1px solid var(--border-color); }
+        .sidebar-footer { padding: 16px; border-top: 1px solid var(--border-color); display:flex; flex-direction:column; gap:8px;}
+        .sidebar-btn { width: 100%; padding: 10px; border-radius: 8px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; font-weight: 500;}
+        .btn-ghost { background: transparent; border: 1px solid var(--border-color); color: var(--text-color); }
+        .btn-ghost:hover { background: var(--bg-color); }
+        .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger-color); border: 1px solid transparent; }
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
 
         /* 聊天主区域 */
         .main-chat { flex: 1; display: flex; flex-direction: column; background-color: var(--chat-bg); position: relative; width: 100%; }
-        .chat-header { padding: 0 20px; height: 60px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background-color: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); z-index: 10; flex-shrink: 0; }
-        [data-theme="dark"] .chat-header { background-color: rgba(31, 41, 55, 0.85); }
+        .chat-header { padding: 0 20px; height: 64px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background-color: var(--chat-bg); z-index: 10; flex-shrink: 0; }
         
-        #chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+        #chat-box { flex: 1; overflow-y: auto; padding: 20px 0; display: flex; flex-direction: column; gap: 24px; scroll-behavior: smooth; }
         
-        /* 消息样式优化 */
-        .message { max-width: 90%; display: flex; flex-direction: column; gap: 4px; }
-        .user-msg { align-self: flex-end; align-items: flex-end; max-width: 85%; }
-        .ai-msg { align-self: flex-start; align-items: flex-start; width: 100%; max-width: 100%; }
+        /* 消息气泡 */
+        .message-row { display: flex; width: 100%; padding: 0 20px; gap: 12px; }
+        .message-row.user { justify-content: flex-end; }
         
-        .message-content { 
-            padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.6; 
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05); word-wrap: break-word; overflow-wrap: break-word; 
-            max-width: 100%; position: relative;
+        .avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+        .ai-avatar { background: var(--ai-msg-bg); border: 1px solid var(--border-color); }
+        .user-avatar { background: var(--primary-color); color: var(--my-msg-text); order: 2; }
+        
+        .message-bubble { 
+            max-width: 85%; padding: 12px 16px; border-radius: 12px; font-size: 15px; line-height: 1.6; position: relative; 
+            border: 1px solid transparent;
         }
         
-        /* 用户消息 */
-        .user-msg .message-content { background: var(--my-msg-bg); color: var(--my-msg-text); border-bottom-right-radius: 4px; white-space: pre-wrap; }
+        .message-row.user .message-bubble { 
+            background: var(--my-msg-bg); color: var(--my-msg-text); 
+            border-top-right-radius: 2px;
+            order: 1;
+        }
         
-        /* AI 消息 - Markdown 渲染优化 */
-        .ai-msg .message-content { background: var(--ai-msg-bg); color: var(--ai-msg-text); border-bottom-left-radius: 4px; width: fit-content; max-width: 100%; overflow-x: auto; }
+        .message-row.ai .message-bubble { 
+            background: var(--ai-msg-bg); color: var(--ai-msg-text); 
+            border-top-left-radius: 2px;
+            border-color: var(--border-color);
+        }
         
-        /* 避免内容被黑框包裹，只对 code block 应用深色背景 */
-        .message-content p { margin: 0 0 10px 0; }
-        .message-content p:last-child { margin: 0; }
-        
-        /* 代码块样式 */
-        .message-content pre { 
-            background: #1e1e1e; color: #d4d4d4; 
+        /* Markdown 样式 */
+        .message-bubble p { margin: 0 0 10px 0; }
+        .message-bubble p:last-child { margin: 0; }
+        .message-bubble pre { 
+            background: #1e1e1e; color: #e2e8f0; 
             padding: 12px; border-radius: 8px; 
-            overflow-x: auto; margin: 10px 0; 
-            font-family: 'Consolas', 'Monaco', monospace; font-size: 13px;
-            border: 1px solid rgba(0,0,0,0.1);
+            overflow-x: auto; margin: 12px 0; 
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px;
+            border: 1px solid rgba(0,0,0,0.3);
         }
-        .message-content code { 
-            background: rgba(150,150,150,0.2); 
+        .message-bubble code { 
+            background: rgba(125, 125, 125, 0.2); 
             padding: 2px 5px; border-radius: 4px; 
-            font-family: 'Consolas', 'Monaco', monospace; font-size: 0.9em; 
-            color: inherit;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.9em; 
         }
-        /* 避免 pre 里的 code 双重背景 */
-        .message-content pre code { background: transparent; padding: 0; color: inherit; }
+        .message-bubble pre code { background: transparent; padding: 0; color: inherit; }
         
-        /* 列表样式 */
-        .message-content ul, .message-content ol { margin: 8px 0; padding-left: 24px; }
-        .message-content li { margin: 4px 0; }
+        /* 表格修复 */
+        .message-bubble table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; font-size: 14px;}
+        .message-bubble th, .message-bubble td { border: 1px solid var(--border-color); padding: 8px 12px; text-align: left; }
+        .message-bubble th { background: rgba(0,0,0,0.03); font-weight: 600; }
+        [data-theme="dark"] .message-bubble th { background: rgba(255,255,255,0.05); border-color: #334155; }
+        [data-theme="dark"] .message-bubble td { border-color: #334155; }
         
-        /* 表格样式 - 修复深色模式边框 */
-        .message-content table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
-        .message-content th, .message-content td { border: 1px solid var(--border-color); padding: 8px 12px; text-align: left; }
-        .message-content th { background: rgba(0,0,0,0.05); font-weight: 600; }
-        
-        /* 深色模式下的表格边框显色修复 */
-        [data-theme="dark"] .message-content th, 
-        [data-theme="dark"] .message-content td { border-color: #6b7280; }
-        [data-theme="dark"] .message-content th { background: rgba(255,255,255,0.05); }
+        .message-bubble img { max-width: 100%; border-radius: 6px; margin-top: 8px; border: 1px solid var(--border-color); }
 
-        .message-content blockquote { border-left: 4px solid var(--primary-color); margin: 8px 0; padding-left: 12px; color: var(--token-text); background: rgba(128,128,128,0.05); padding: 8px 12px; border-radius: 4px; }
-        .message-content img { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; cursor: pointer; }
+        .msg-meta { font-size: 10px; opacity: 0.5; margin-top: 4px; text-align: right; }
 
-        /* 标题样式 */
-        .message-content h1, .message-content h2, .message-content h3 { margin-top: 16px; margin-bottom: 8px; font-weight: bold; line-height: 1.3; }
-        .message-content h1 { font-size: 1.4em; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; }
-        .message-content h2 { font-size: 1.25em; }
-        .message-content h3 { font-size: 1.1em; }
-
-        .msg-time { font-size: 10px; color: var(--token-text); margin-top: 2px; padding: 0 2px; }
+        /* 输入区域 */
+        .input-wrapper { padding: 16px 20px; background: var(--chat-bg); width: 100%; padding-bottom: max(16px, env(safe-area-inset-bottom)); flex-shrink: 0; }
+        .input-box { display: flex; align-items: flex-end; gap: 8px; background: var(--bg-color); padding: 8px; border-radius: 12px; border: 1px solid var(--border-color); transition: border-color 0.2s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+        .input-box:focus-within { border-color: var(--text-secondary); }
         
-        /* 输入区域修复 */
-        .input-wrapper { padding: 15px 20px; background: var(--chat-bg); width: 100%; padding-bottom: max(15px, env(safe-area-inset-bottom)); flex-shrink: 0; }
-        .input-container { display: flex; align-items: flex-end; gap: 8px; background: var(--bg-color); padding: 8px 10px; border-radius: 16px; border: 1px solid var(--border-color); width: 100%; transition: border-color 0.2s; }
-        .input-container:focus-within { border-color: var(--primary-color); }
-        
-        /* 修复 Textarea 拉伸问题 */
         textarea { 
-            flex: 1; width: 0; min-width: 0; /* 这里的 width: 0 配合 flex: 1 非常重要 */
-            background: transparent; border: none; outline: none; resize: none; 
-            color: var(--text-color); font-size: 16px; 
-            max-height: 150px; /* 强制最大高度 */
-            overflow-y: auto; /* 超出显示滚动条 */
-            font-family: inherit; padding: 8px 0; line-height: 1.5; 
+            flex: 1; background: transparent; border: none; outline: none; resize: none; 
+            color: var(--text-color); font-size: 15px; max-height: 150px; overflow-y: auto; 
+            padding: 10px 4px; line-height: 1.5; font-family: inherit;
         }
-        
-        .action-btn { width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer; background: transparent; color: var(--token-text); font-size: 20px; display:flex; align-items:center; justify-content:center; flex-shrink: 0; margin-bottom: 2px; }
-        .send-btn { background: var(--primary-color); color: white; border-radius: 12px; width: 40px; height: 40px; font-size: 16px; transition: opacity 0.2s; }
+
+        .send-btn { 
+            background: var(--text-color); color: var(--bg-color); 
+            width: 36px; height: 36px; border-radius: 8px; border: none; cursor: pointer; 
+            display: flex; align-items: center; justify-content: center; transition: opacity 0.2s; 
+        }
         .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .send-btn svg { width: 18px; height: 18px; }
 
-        #preview-area { display: flex; gap: 8px; padding-bottom: 10px; flex-wrap: wrap; }
-        .preview-item { 
-            width: 64px; height: 64px; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid var(--border-color); 
-            display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--bg-color);
-        }
+        #preview-area { display: flex; gap: 8px; padding-bottom: 8px; flex-wrap: wrap; }
+        .preview-item { width: 48px; height: 48px; border-radius: 6px; overflow: hidden; position: relative; border: 1px solid var(--border-color); display:flex; align-items:center; justify-content:center; background: var(--bg-color); }
         .preview-item img { width: 100%; height: 100%; object-fit: cover; }
-        .remove-file { 
-            position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; 
-            border-radius: 50%; width: 18px; height: 18px; font-size: 12px; 
-            display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 10;
-        }
+        .remove-file { position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; opacity: 0; cursor: pointer; transition: opacity 0.2s; }
+        .preview-item:hover .remove-file { opacity: 1; }
 
-        /* Admin Modal */
-        #adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
-        .admin-panel { background: var(--bg-color); width: 95%; max-width: 800px; height: 85vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
-        .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); }
-        .admin-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+        /* Admin */
+        #adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; }
+        .admin-panel { background: var(--chat-bg); width: 95%; max-width: 800px; height: 85vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); border: 1px solid var(--border-color); }
+        .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border-color); }
         
-        .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; }
-        .stat-card { background: var(--chat-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; }
-        .stat-user-title { font-weight: bold; font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; color: var(--primary-color); }
-        .stat-item { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px dashed var(--border-color); }
-        .stat-item:last-child { border-bottom: none; }
-        .stat-name { color: var(--text-color); }
-        .stat-count { font-weight: bold; }
-        
-        .preset-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: var(--chat-bg); border: 1px solid var(--border-color); margin-bottom: 8px; border-radius: 6px; }
-
         @media (max-width: 768px) {
             .sidebar { width: 85%; max-width: 320px; }
-            .chat-header { padding: 0 15px; height: 54px; }
-            .input-wrapper { padding: 10px 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+            .chat-header { padding: 0 16px; height: 56px; }
+            .input-wrapper { padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
         }
     </style>
 </head>
 <body>
+
 <div id="login-screen">
     <div class="login-box">
-        <div class="login-title">👂🏻黎吧啦ai站👂🏻</div>
+        <div class="login-title"><i data-lucide="bot" style="width:32px; height:32px;"></i> AI Workspace</div>
         <input type="text" id="loginUser" class="login-input" placeholder="账号">
         <input type="password" id="loginPass" class="login-input" placeholder="密码">
-        <button class="login-btn" onclick="handleLogin()">进入 AI 空间</button>
+        <button class="login-btn" onclick="handleLogin()">进入工作台</button>
     </div>
 </div>
 
 <div id="adminModal">
     <div class="admin-panel">
         <div class="admin-header">
-            <h3 style="margin:0">⚙️ 管理后台</h3>
-            <button onclick="document.getElementById('adminModal').style.display='none'" style="background:none; border:none; font-size:24px; cursor:pointer; color:var(--text-color);">×</button>
+            <h3 style="margin:0; display:flex; align-items:center; gap:8px;"><i data-lucide="settings-2"></i> 管理后台</h3>
+            <button class="icon-btn" onclick="document.getElementById('adminModal').style.display='none'"><i data-lucide="x"></i></button>
         </div>
-        <div class="admin-body">
-            <div>
-                <h4 style="margin-bottom:10px; color:var(--primary-color);">📊 调用统计</h4>
-                <div id="statGrid" class="stat-grid"></div>
+        <div class="admin-body" style="flex:1; overflow-y:auto; padding:24px;">
+            <div style="margin-bottom:32px;">
+                <h4 style="margin-bottom:16px; color:var(--text-color); display:flex; align-items:center; gap:8px;"><i data-lucide="bar-chart-3"></i> 调用统计</h4>
+                <div id="statGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;"></div>
             </div>
+            
             <div>
-                <h4 style="margin-bottom:10px; color:var(--primary-color);">🤖 模型预设</h4>
-                <div id="adminPresetList"></div>
-                <div style="margin-top:15px; background:var(--ai-msg-bg); padding:15px; border-radius:8px;">
-                    <div style="font-weight:bold; margin-bottom:10px;" id="addFormTitle">添加新预设</div>
+                <h4 style="margin-bottom:16px; color:var(--text-color); display:flex; align-items:center; gap:8px;"><i data-lucide="cpu"></i> 模型预设</h4>
+                <div id="adminPresetList" style="margin-bottom:16px; display:flex; flex-direction:column; gap:8px;"></div>
+                
+                <div style="background:var(--bg-color); padding:20px; border-radius:12px; border:1px solid var(--border-color);">
+                    <div style="font-weight:600; margin-bottom:16px; font-size:14px;" id="addFormTitle">添加新预设</div>
                     <input type="hidden" id="addId">
-                    <input type="text" id="addName" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="显示名称">
-                    <input type="text" id="addDesc" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="描述">
-                    <input type="text" id="addUrl" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="API Base URL">
-                    <input type="text" id="addKey" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="API Key">
-                    <input type="text" id="addModelId" class="login-input" style="padding:8px; margin-bottom:8px;" placeholder="Model ID">
-                    <button class="login-btn" style="padding:8px;" onclick="savePreset()" id="savePresetBtn">添加预设</button>
-                    <button onclick="resetPresetForm()" style="margin-top:5px; padding:8px; background:transparent; border:none; color:var(--token-text); cursor:pointer;">重置</button>
+                    <div style="display:grid; gap:12px;">
+                        <input type="text" id="addName" class="login-input" style="margin:0" placeholder="显示名称">
+                        <input type="text" id="addDesc" class="login-input" style="margin:0" placeholder="描述">
+                        <input type="text" id="addUrl" class="login-input" style="margin:0" placeholder="API Base URL">
+                        <input type="text" id="addKey" class="login-input" style="margin:0" placeholder="API Key">
+                        <input type="text" id="addModelId" class="login-input" style="margin:0" placeholder="Model ID">
+                        <div style="display:flex; gap:12px; margin-top:8px;">
+                            <button class="login-btn" style="flex:1;" onclick="savePreset()" id="savePresetBtn">保存配置</button>
+                            <button class="btn-ghost" style="width:auto; padding:0 20px; border-radius:12px; cursor:pointer;" onclick="resetPresetForm()">重置</button>
+                        </div>
+                    </div>
                 </div>
-                <hr style="margin: 20px 0; border:0; border-top:1px solid var(--border-color);">
-                <div style="text-align:center;">
-                    <button onclick="forceMigrate()" style="background:#fee2e2; color:#ef4444; border:1px solid #ef4444; padding:8px 15px; border-radius:8px; cursor:pointer; font-size:12px;">⚠️ 从旧 database.json 导入数据</button>
+                
+                <div style="text-align:center; margin-top:40px;">
+                    <button class="btn-danger sidebar-btn" onclick="forceMigrate()" style="justify-content:center;">
+                        <i data-lucide="database-backup"></i> 从旧 database.json 导入数据
+                    </button>
                 </div>
             </div>
         </div>
@@ -230,60 +273,81 @@
 
 <div class="app-container" id="app">
     <div class="overlay" onclick="toggleSidebar()"></div>
+    
     <div class="sidebar" id="sidebar">
         <div class="sidebar-content">
-            <!-- 搜索栏 -->
+            <!-- Search -->
             <div class="search-box">
-                <input type="text" class="search-input" id="searchInput" placeholder="搜索聊天记录..." oninput="handleSearch(this.value)">
-                <span class="search-icon">🔍</span>
+                <input type="text" class="search-input" id="searchInput" placeholder="搜索..." oninput="handleSearch(this.value)">
+                <i data-lucide="search" class="search-icon"></i>
             </div>
 
-            <!-- 常规列表容器 -->
-            <div id="normalSidebarList">
-                <div style="font-size:12px; color:var(--token-text); margin-bottom:8px; font-weight:bold;">创建新会话</div>
-                <div class="mode-list" id="presetList"></div>
-                
-                <div style="font-size:12px; color:var(--token-text); margin: 20px 0 8px 0; font-weight:bold; display:flex; justify-content:space-between;">
-                    <span>历史会话</span>
-                    <span id="sessionCount" style="font-weight:normal;">0/100</span>
+            <!-- Normal Content -->
+            <div id="normalSidebarList" style="display:flex; flex-direction:column; gap:24px;">
+                <div>
+                    <div class="section-title">新对话</div>
+                    <div class="mode-list" id="presetList"></div>
                 </div>
-                <div class="session-list" id="sessionList"></div>
+                
+                <div>
+                    <div class="section-title" style="display:flex; justify-content:space-between;">
+                        <span>历史记录</span>
+                        <span id="sessionCount" style="font-weight:normal;"></span>
+                    </div>
+                    <div id="sessionListContainer"></div>
+                </div>
             </div>
 
-            <!-- 搜索结果容器 -->
+            <!-- Search Results -->
             <div id="searchResultList" style="display:none;">
-                <div style="font-size:12px; color:var(--token-text); margin-bottom:8px; font-weight:bold;">搜索结果</div>
-                <div class="session-list" id="searchOutput"></div>
+                <div class="section-title">搜索结果</div>
+                <div id="searchOutput" style="display:flex; flex-direction:column; gap:4px;"></div>
             </div>
         </div>
         
         <div class="sidebar-footer">
-            <button id="adminBtn" onclick="openAdmin()" style="display:none; width:100%; padding:10px; margin-bottom:10px; background:var(--chat-bg); border:1px solid var(--border-color); border-radius:8px; color:var(--text-color); cursor:pointer;">⚙️ 管理后台</button>
-            <button onclick="logout()" style="width:100%; padding:10px; background:#fee2e2; color:#ef4444; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">退出登录</button>
+            <button id="adminBtn" onclick="openAdmin()" class="sidebar-btn btn-ghost" style="display:none;">
+                <i data-lucide="settings"></i> 设置
+            </button>
+            <button onclick="logout()" class="sidebar-btn btn-danger">
+                <i data-lucide="log-out"></i> 退出登录
+            </button>
         </div>
     </div>
 
     <div class="main-chat">
         <header class="chat-header">
             <div style="display:flex; align-items:center; gap:12px;">
-                <button class="menu-btn" onclick="toggleSidebar()" style="background:none; border:none; font-size:24px; cursor:pointer; padding:5px; color:var(--text-color);">≡</button>
+                <button class="icon-btn" onclick="toggleSidebar()" style="color:var(--text-color);">
+                    <i data-lucide="menu"></i>
+                </button>
                 <div>
-                    <div style="font-weight:700; font-size:16px; display:flex; align-items:center;">
-                        <span style="width:8px; height:8px; background:#10b981; border-radius:50%; margin-right:8px;"></span>
+                    <div style="font-weight:600; font-size:16px; display:flex; align-items:center; color:var(--text-color);">
+                        <span style="width:8px; height:8px; background:#10b981; border-radius:50%; margin-right:8px; display:inline-block;"></span>
                         <span id="headerTitle">AI Chat</span>
                     </div>
                 </div>
             </div>
-            <button class="action-btn" onclick="toggleTheme()" title="切换主题">🌗</button>
+            <div style="display:flex; gap:4px;">
+                <button class="icon-btn" onclick="toggleTheme()" title="切换主题">
+                    <i data-lucide="moon" id="themeIcon"></i>
+                </button>
+            </div>
         </header>
+        
         <div id="chat-box"></div>
+        
         <div class="input-wrapper">
             <div id="preview-area"></div>
-            <div class="input-container">
+            <div class="input-box">
                 <input type="file" id="fileInput" accept="image/*,.json,.txt,.js,.md,.csv,.py" multiple style="display:none;" onchange="handleFileSelect(this)">
-                <button class="action-btn" onclick="document.getElementById('fileInput').click()" title="上传文件">📎</button>
-                <textarea id="userInput" placeholder="输入消息 (支持 Markdown)..." rows="1" oninput="autoResize(this)"></textarea>
-                <button class="action-btn send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+                <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="上传文件" style="align-self:flex-end; margin-bottom:2px;">
+                    <i data-lucide="paperclip"></i>
+                </button>
+                <textarea id="userInput" placeholder="输入消息..." rows="1" oninput="autoResize(this)"></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                    <i data-lucide="arrow-up"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -297,20 +361,18 @@
     let authToken = localStorage.getItem('authToken');
     let isAdmin = localStorage.getItem('isAdmin') === 'true';
 
-    // 配置 Marked 和 Highlight
     marked.setOptions({
         highlight: function(code, lang) {
             const language = highlight.getLanguage(lang) ? lang : 'plaintext';
             return highlight.highlight(code, { language }).value;
         },
-        langPrefix: 'hljs language-', 
-        breaks: true, // 回车换行
-        gfm: true     // GitHub 风格
+        langPrefix: 'hljs language-', breaks: true, gfm: true
     });
 
     window.onload = function() {
         const theme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', theme);
+        lucide.createIcons(); // Initialize Icons
         if (authToken) initApp();
         document.getElementById('userInput').addEventListener('keydown', (e) => {
             if(e.key === 'Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); sendMessage(); }
@@ -339,11 +401,11 @@
     async function initApp() {
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('app').style.display = 'flex';
-        if(isAdmin) document.getElementById('adminBtn').style.display = 'block';
+        if(isAdmin) document.getElementById('adminBtn').style.display = 'flex';
         await fetchPresets(); await fetchSessions(); 
+        lucide.createIcons();
     }
 
-    // --- 搜索功能 ---
     let searchTimeout;
     async function handleSearch(query) {
         clearTimeout(searchTimeout);
@@ -352,7 +414,7 @@
         const output = document.getElementById('searchOutput');
         
         if (!query.trim()) {
-            normalList.style.display = 'block';
+            normalList.style.display = 'flex';
             searchList.style.display = 'none';
             return;
         }
@@ -366,7 +428,7 @@
                     searchList.style.display = 'block';
                     output.innerHTML = '';
                     if (json.data.length === 0) {
-                        output.innerHTML = '<div style="padding:10px; color:#999; text-align:center;">无结果</div>';
+                        output.innerHTML = '<div style="padding:10px; color:var(--text-secondary); text-align:center; font-size:14px;">无相关记录</div>';
                         return;
                     }
                     json.data.forEach(item => {
@@ -374,8 +436,8 @@
                         output.innerHTML += `
                             <div class="session-item" onclick="loadSession('${item.session_id}')">
                                 <div>
-                                    <div style="font-weight:bold;">${item.session_title}</div>
-                                    <div style="font-size:12px; color:var(--token-text);">${item.role === 'user'?'👤':'🤖'} ${preview}</div>
+                                    <div style="font-weight:600;">${item.session_title}</div>
+                                    <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">${preview}</div>
                                 </div>
                             </div>`;
                     });
@@ -384,20 +446,63 @@
         }, 300); 
     }
 
+    // --- 日期分组逻辑 ---
+    function getDateLabel(ts) {
+        const d = new Date(ts);
+        const now = new Date();
+        const diff = now - d;
+        const oneDay = 24 * 60 * 60 * 1000;
+        
+        if (d.toDateString() === now.toDateString()) return '今天';
+        if (diff < oneDay * 2 && d.getDate() !== now.getDate()) return '昨天';
+        if (diff < oneDay * 7) return '7天内';
+        return '更早';
+    }
+
     async function fetchSessions() {
         try {
             const res = await fetch('/api/sessions', { headers: { 'Authorization': `Bearer ${authToken}` } });
             const json = await res.json();
             if (json.success) {
-                const list = document.getElementById('sessionList');
-                list.innerHTML = '';
-                document.getElementById('sessionCount').innerText = `${json.data.length}/100`;
+                const container = document.getElementById('sessionListContainer');
+                container.innerHTML = '';
+                document.getElementById('sessionCount').innerText = `${json.data.length}`;
+                
+                // Grouping
+                const groups = { '今天': [], '昨天': [], '7天内': [], '更早': [] };
                 json.data.forEach(s => {
-                    const preset = PRESETS.find(p => p.id === s.mode);
-                    const active = s.id === currentSessionId ? 'active' : '';
-                    list.innerHTML += `<div class="session-item ${active}"><div class="session-title" onclick="loadSession('${s.id}')"><span style="margin-right:5px;">${preset?preset.icon:'💬'}</span> ${s.title}</div><div class="session-actions"><button class="sess-btn" onclick="renameSession('${s.id}', '${s.title}')">✎</button><button class="sess-btn del" onclick="deleteSession('${s.id}')">🗑</button></div></div>`;
+                    const label = getDateLabel(s.updated_at);
+                    if (groups[label]) groups[label].push(s);
+                    else groups['更早'].push(s);
                 });
+
+                const groupOrder = ['今天', '昨天', '7天内', '更早'];
+                
+                groupOrder.forEach(label => {
+                    if (groups[label].length > 0) {
+                        let html = `<div class="session-group"><div class="group-header">${label}</div>`;
+                        groups[label].forEach(s => {
+                            const preset = PRESETS.find(p => p.id === s.mode);
+                            const active = s.id === currentSessionId ? 'active' : '';
+                            html += `
+                                <div class="session-item ${active}" onclick="loadSession('${s.id}')">
+                                    <div class="session-title">
+                                        <span style="font-size:16px;">${preset?preset.icon:''}</span> 
+                                        <span>${s.title}</span>
+                                    </div>
+                                    <div class="session-actions">
+                                        <button class="icon-btn" style="padding:4px;" onclick="renameSession('${s.id}', '${s.title}'); event.stopPropagation();"><i data-lucide="edit-2" style="width:14px; height:14px;"></i></button>
+                                        <button class="icon-btn" style="padding:4px; color:var(--danger-color);" onclick="deleteSession('${s.id}'); event.stopPropagation();"><i data-lucide="trash-2" style="width:14px; height:14px;"></i></button>
+                                    </div>
+                                </div>`;
+                        });
+                        html += `</div>`;
+                        container.innerHTML += html;
+                    }
+                });
+
                 if (!currentSessionId && json.data.length > 0) loadSession(json.data[0].id);
+                lucide.createIcons();
             }
         } catch(e) {}
     }
@@ -406,17 +511,17 @@
         if(isRequesting) return;
         currentSessionId = id;
         document.getElementById('searchInput').value = '';
-        document.getElementById('normalSidebarList').style.display = 'block';
+        document.getElementById('normalSidebarList').style.display = 'flex';
         document.getElementById('searchResultList').style.display = 'none';
 
-        document.getElementById('chat-box').innerHTML = '<div style="text-align:center; padding:20px;">加载中...</div>';
+        document.getElementById('chat-box').innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-secondary);">加载中...</div>';
         try {
             const res = await fetch(`/api/session/${id}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
             const json = await res.json();
             if (json.success) {
                 document.getElementById('headerTitle').innerText = json.session.title;
                 const box = document.getElementById('chat-box'); box.innerHTML = '';
-                if (json.messages.length === 0) box.innerHTML = '<div style="text-align:center; padding:50px; color:var(--token-text);">开始新的对话...</div>';
+                if (json.messages.length === 0) box.innerHTML = '<div style="text-align:center; padding:80px; color:var(--text-secondary);"><i data-lucide="message-square-plus" style="width:48px;height:48px;opacity:0.2;margin-bottom:16px;"></i><br>开始新的对话</div>';
                 
                 json.messages.forEach(msg => {
                     let text = ""; let imgs = [];
@@ -427,7 +532,8 @@
                     appendUI(null, msg.role, text, imgs, false, msg.timestamp);
                 });
                 
-                fetchSessions();
+                fetchSessions(); // Update Active State
+                lucide.createIcons(); // Re-render icons for empty state
                 if(window.innerWidth < 1000) { document.getElementById('sidebar').classList.remove('open'); document.querySelector('.overlay').classList.remove('show'); }
             }
         } catch(e) { document.getElementById('chat-box').innerHTML = "加载失败"; }
@@ -440,7 +546,6 @@
     }
 
     async function renameSession(id, oldTitle) {
-        event.stopPropagation();
         const t = prompt("新标题", oldTitle);
         if (t && t !== oldTitle) {
             await fetch('/api/session/rename', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id, title: t }) });
@@ -450,10 +555,9 @@
     }
 
     async function deleteSession(id) {
-        event.stopPropagation();
         if (!confirm("确定删除?")) return;
         await fetch('/api/session/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id }) });
-        if(currentSessionId === id) { currentSessionId = null; document.getElementById('chat-box').innerHTML = ''; }
+        if(currentSessionId === id) { currentSessionId = null; document.getElementById('chat-box').innerHTML = ''; document.getElementById('headerTitle').innerText = 'AI Chat'; }
         fetchSessions();
     }
 
@@ -472,7 +576,7 @@
 
         appendUI(null, "user", text + (uploadedFiles.length > 0 ? `\n(📎 ${uploadedFiles.length} 附件)` : ""), uploadedFiles.filter(f=>f.type.startsWith('image/')).map(f=>f.data), false, Date.now());
         
-        input.value = ''; uploadedFiles = []; renderPreviews(); autoResize(input); // Reset height
+        input.value = ''; uploadedFiles = []; renderPreviews(); autoResize(input);
         isRequesting = true;
         const sendBtn = document.getElementById('sendBtn'); sendBtn.disabled = true;
 
@@ -515,7 +619,7 @@
                              if (json.error) throw new Error(json.error.message);
                              const delta = json.choices?.[0]?.delta?.content || "";
                              aiFullText += delta;
-                         } catch (e) { console.log("Parse error", e); }
+                         } catch (e) { }
                     } else {
                         try {
                            const json = JSON.parse(line);
@@ -532,14 +636,16 @@
             }
             
             aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
-            const timeDiv = document.createElement('div');
-            timeDiv.className = 'msg-time';
-            timeDiv.innerText = formatTime(Date.now());
-            document.getElementById(aiMsgId).appendChild(timeDiv);
+            // Add meta info
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'msg-meta';
+            metaDiv.innerText = formatTime(Date.now());
+            document.getElementById(aiMsgId).querySelector('.message-bubble').appendChild(metaDiv);
+            
             fetchSessions(); 
 
         } catch (e) {
-            aiContentDiv.innerHTML += `<br><span style="color:red">Error: ${e.message}</span>`;
+            aiContentDiv.innerHTML += `<br><span style="color:var(--danger-color)">Error: ${e.message}</span>`;
         } finally {
             isRequesting = false; sendBtn.disabled = false;
         }
@@ -548,36 +654,41 @@
     function formatTime(ts) {
         if (!ts) return '';
         const date = new Date(ts);
-        const y = date.getFullYear();
-        const m = (date.getMonth() + 1).toString().padStart(2, '0');
-        const d = date.getDate().toString().padStart(2, '0');
-        const h = date.getHours().toString().padStart(2, '0');
-        const min = date.getMinutes().toString().padStart(2, '0');
-        return `${y}-${m}-${d} ${h}:${min}`;
+        return `${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
     }
 
     function appendUI(id, role, text, images = [], isLoading = false, timestamp = null) {
         const box = document.getElementById('chat-box');
         const div = document.createElement('div');
-        div.className = `message ${role === 'user' ? 'user-msg' : 'ai-msg'}`;
+        div.className = `message-row ${role === 'user' ? 'user' : 'ai'}`;
         div.id = id || ('msg-' + Date.now());
         
         let contentHtml = "";
-        
         if (role === 'user') {
             if (images && images.length > 0) images.forEach(u => contentHtml += `<img src="${u}"><br>`);
             contentHtml += text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
         } else {
-            if (isLoading) contentHtml = `<span class="typing-indicator">Thinking...</span>`;
+            if (isLoading) contentHtml = `<span style="color:var(--text-secondary)">Thinking...</span>`;
             else contentHtml = DOMPurify.sanitize(marked.parse(text));
         }
-
-        let html = `<div class="message-content">${contentHtml}</div>`;
-        if (timestamp && !isLoading) html += `<div class="msg-time">${formatTime(timestamp)}</div>`;
+        
+        // Avatar logic (can be replaced with icons)
+        const avatarIcon = role === 'user' ? 'user' : 'bot';
+        
+        let html = `
+            <div class="avatar ${role === 'user' ? 'user-avatar' : 'ai-avatar'}">
+                <i data-lucide="${avatarIcon}" style="width:18px; height:18px;"></i>
+            </div>
+            <div class="message-bubble">
+                <div class="message-content">${contentHtml}</div>
+                ${(timestamp && !isLoading) ? `<div class="msg-meta">${formatTime(timestamp)}</div>` : ''}
+            </div>
+        `;
         
         div.innerHTML = html;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
+        lucide.createIcons({ root: div }); // Render icons for new message
         return div.id;
     }
 
@@ -593,17 +704,17 @@
     }
     function renderPreviews() {
         const area = document.getElementById('preview-area'); area.innerHTML = '';
-        uploadedFiles.forEach((f, i) => area.innerHTML += `<div class="preview-item">${f.type.startsWith('image/')?`<img src="${f.data}">`:'📄'}<div class="remove-file" onclick="uploadedFiles.splice(${i},1);renderPreviews()">×</div></div>`);
+        uploadedFiles.forEach((f, i) => {
+            area.innerHTML += `
+            <div class="preview-item">
+                ${f.type.startsWith('image/') ? `<img src="${f.data}">` : '<i data-lucide="file-text" style="color:var(--text-secondary)"></i>'}
+                <div class="remove-file" onclick="uploadedFiles.splice(${i},1);renderPreviews()"><i data-lucide="x" style="width:14px"></i></div>
+            </div>`;
+        });
+        lucide.createIcons();
     }
     
-    // --- 修复后的 autoResize ---
-    function autoResize(el) {
-        // 1. 先重置高度，允许 scrollHeight 变小
-        el.style.height = 'auto'; 
-        // 2. 重新计算高度，取 scrollHeight 和 150px 的较小值
-        // 注意：我们通过 CSS 设置了 max-height: 150px，所以这里主要是为了跟随内容增长
-        el.style.height = (el.scrollHeight) + 'px'; 
-    }
+    function autoResize(el) { el.style.height = 'auto'; el.style.height = (el.scrollHeight) + 'px'; }
 
     // --- Admin ---
     async function fetchPresets() {
@@ -612,7 +723,14 @@
     function renderPresetsSidebar() {
         const list = document.getElementById('presetList'); list.innerHTML = '';
         PRESETS.forEach(p => {
-            list.innerHTML += `<div class="mode-card" onclick="createNewSession('${p.id}')"><div class="mode-icon">${p.icon||'⚡'}</div><div class="mode-info"><div>${p.name}</div><div style="font-size:10px;color:var(--token-text);">${p.desc}</div></div></div>`;
+            list.innerHTML += `
+            <div class="mode-card" onclick="createNewSession('${p.id}')">
+                <div class="mode-icon">${p.icon||'⚡'}</div>
+                <div class="mode-info">
+                    <div>${p.name}</div>
+                    <div>${p.desc}</div>
+                </div>
+            </div>`;
         });
     }
 
@@ -621,18 +739,17 @@
         const res = await fetch('/api/admin/data', { headers: { 'Authorization': `Bearer ${authToken}` } });
         const data = await res.json();
         
-        const grid = document.getElementById('statGrid');
-        grid.innerHTML = '';
+        const grid = document.getElementById('statGrid'); grid.innerHTML = '';
         if (data.usage) {
             for (const [user, usage] of Object.entries(data.usage)) {
                 let total = 0; let listHtml = '';
                 for (const [mid, count] of Object.entries(usage)) {
                     total += count;
                     const preset = PRESETS.find(p => p.id === mid);
-                    const displayName = preset ? `${preset.icon} ${preset.name}` : `<span style="color:#999;font-style:italic;">${mid}</span>`;
-                    listHtml += `<div class="stat-item"><span class="stat-name">${displayName}</span><span class="stat-count">${count}</span></div>`;
+                    const displayName = preset ? `${preset.icon} ${preset.name}` : `<span style="color:var(--text-secondary);font-style:italic;">${mid}</span>`;
+                    listHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--border-color);"><span>${displayName}</span><span style="font-weight:600;">${count}</span></div>`;
                 }
-                grid.innerHTML += `<div class="stat-card"><div class="stat-user-title"><span>👤 ${user}</span><span style="font-size:12px; background:#e0e7ff; color:var(--primary-color); padding:2px 8px; border-radius:10px;">共 ${total} 次</span></div><div>${listHtml}</div></div>`;
+                grid.innerHTML += `<div style="background:var(--bg-color);border:1px solid var(--border-color);padding:16px;border-radius:12px;"><div style="font-weight:600;margin-bottom:12px;display:flex;justify-content:space-between;"><span>👤 ${user}</span><span style="background:var(--primary-color);color:var(--my-msg-text);padding:2px 8px;border-radius:10px;font-size:12px;">${total}</span></div><div>${listHtml}</div></div>`;
             }
         }
 
@@ -640,14 +757,15 @@
         data.presets.forEach(p => {
             const presetJson = JSON.stringify(p).replace(/"/g, '&quot;');
             pList.innerHTML += `
-                <div class="preset-row">
-                    <div><strong>${p.name}</strong> <small>(${p.modelId})</small></div>
-                    <div>
-                        <button onclick="editPreset('${presetJson}')" style="background:#e0f2f1; color:#00897b; border:none; padding:5px 10px; margin-right:5px; border-radius:4px; cursor:pointer;">编辑</button>
-                        <button onclick="deletePreset('${p.id}')" style="background:#fee2e2; color:red; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-color);border:1px solid var(--border-color);border-radius:8px;">
+                    <div><strong style="margin-right:8px;">${p.name}</strong> <span style="font-size:12px;color:var(--text-secondary);">${p.modelId}</span></div>
+                    <div style="display:flex;gap:4px;">
+                        <button class="icon-btn" onclick="editPreset('${presetJson}')"><i data-lucide="edit-3" style="width:16px;"></i></button>
+                        <button class="icon-btn" style="color:var(--danger-color);" onclick="deletePreset('${p.id}')"><i data-lucide="trash-2" style="width:16px;"></i></button>
                     </div>
                 </div>`;
         });
+        lucide.createIcons();
     }
 
     function editPreset(jsonStr) {
@@ -659,14 +777,14 @@
         document.getElementById('addKey').value = p.key;
         document.getElementById('addModelId').value = p.modelId;
         document.getElementById('addFormTitle').innerText = "编辑预设: " + p.name;
-        document.getElementById('savePresetBtn').innerText = "保存修改";
+        document.getElementById('savePresetBtn').innerText = "保存";
     }
 
     function resetPresetForm() {
         document.getElementById('addId').value = '';
         document.querySelectorAll('#adminModal input[type="text"]').forEach(i => i.value = '');
         document.getElementById('addFormTitle').innerText = "添加新预设";
-        document.getElementById('savePresetBtn').innerText = "添加预设";
+        document.getElementById('savePresetBtn').innerText = "保存";
     }
 
     async function savePreset() {
@@ -697,7 +815,12 @@
     }
 
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.querySelector('.overlay').classList.toggle('show'); }
-    function toggleTheme() { const n = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', n); localStorage.setItem('theme', n); }
+    function toggleTheme() { 
+        const n = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; 
+        document.documentElement.setAttribute('data-theme', n); 
+        localStorage.setItem('theme', n);
+        lucide.createIcons();
+    }
 </script>
 </body>
 </html>
