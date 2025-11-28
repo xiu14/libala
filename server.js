@@ -27,7 +27,6 @@ const DEFAULT_PRESETS = [
 ];
 
 app.use(express.json({ limit: '50mb' }));
-// 增加 urlencoded 支持，以防万一
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '.')));
 
@@ -47,6 +46,8 @@ function initDB() {
                 db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT, title TEXT, mode TEXT, created_at INTEGER, updated_at INTEGER)`);
                 db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE)`);
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
+                // 新增：公告表
+                db.run(`CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT, timestamp INTEGER)`);
             });
 
             await checkAndMigrateData(false);
@@ -223,7 +224,6 @@ app.post('/api/session/delete', async (req, res) => {
     res.json({ success: true });
 });
 
-// --- 新增功能：搜索聊天记录 ---
 app.get('/api/search', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
@@ -233,8 +233,6 @@ app.get('/api/search', async (req, res) => {
 
     try {
         const keyword = `%${q.trim()}%`;
-        // 联表查询：查找属于该用户的会话中，匹配关键词的消息
-        // 同时也返回 session_title 以便前端展示
         const sql = `
             SELECT 
                 messages.id as msg_id, 
@@ -252,11 +250,9 @@ app.get('/api/search', async (req, res) => {
         `;
         const rows = await dbAll(sql, [user, keyword, keyword]);
         
-        // 解析 content (如果是JSON字符串)
         const results = rows.map(r => {
             let text = "";
             try {
-                // 如果是复杂的 content (如带图片的数组)，尝试解析并提取文本
                 const parsed = JSON.parse(r.content);
                 if (Array.isArray(parsed)) {
                     text = parsed.filter(p => p.type === 'text').map(p => p.text).join(' ');
@@ -264,7 +260,7 @@ app.get('/api/search', async (req, res) => {
                     text = r.content;
                 }
             } catch (e) {
-                text = r.content; // 普通字符串
+                text = r.content;
             }
             return { ...r, content: text };
         });
@@ -276,7 +272,28 @@ app.get('/api/search', async (req, res) => {
     }
 });
 
-// --- 核心修复：流式聊天接口 (Streaming Support) ---
+// --- 新增：公告 API ---
+app.get('/api/announcement', async (req, res) => {
+    const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
+    if (!user) return res.status(403).json({ success: false });
+    
+    // 获取最新的一条公告
+    const ann = await dbGet("SELECT content, timestamp FROM announcements ORDER BY id DESC LIMIT 1");
+    res.json({ success: true, data: ann });
+});
+
+app.post('/api/admin/announcement', async (req, res) => {
+    const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
+    if (user !== ADMIN_USER) return res.status(403).json({ success: false });
+    
+    const { content } = req.body;
+    if (!content) return res.status(400).json({ success: false });
+
+    await dbRun("INSERT INTO announcements (content, timestamp) VALUES (?, ?)", [content, Date.now()]);
+    res.json({ success: true });
+});
+
+// --- 流式聊天接口 ---
 app.post('/api/chat', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ error: { message: "登录已过期" } });
@@ -288,7 +305,6 @@ app.post('/api/chat', async (req, res) => {
         const preset = await dbGet("SELECT * FROM presets WHERE id = ?", [presetId]);
         if (!preset) return res.status(400).json({ error: { message: "模型配置不存在" } });
 
-        // 1. 先保存用户的提问
         const lastMsg = messages[messages.length - 1];
         if (lastMsg && lastMsg.role === 'user') {
             const contentStr = typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content);
@@ -297,17 +313,14 @@ app.post('/api/chat', async (req, res) => {
             await dbRun("UPDATE sessions SET updated_at = ? WHERE id = ?", [now, sessionId]);
         }
 
-        // 2. 处理 URL
         let apiUrl = preset.url;
         if (apiUrl.endsWith('/')) apiUrl = apiUrl.slice(0, -1);
         if (!apiUrl.includes('/chat/completions')) apiUrl += '/v1/chat/completions';
 
-        // 3. 设置 SSE 响应头，开启流式传输
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
 
-        // 4. 发起请求 (开启 stream: true)
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${preset.key}` },
@@ -315,7 +328,7 @@ app.post('/api/chat', async (req, res) => {
                 model: preset.modelId, 
                 messages: messages, 
                 temperature: 0.7,
-                stream: true // 关键：开启流式
+                stream: true 
             })
         });
 
@@ -325,17 +338,10 @@ app.post('/api/chat', async (req, res) => {
             return res.end();
         }
 
-        // 5. 处理流数据
-        let aiFullResponse = ""; // 用于拼接完整的 AI 回复以便存库
-        let hasError = false;
-
-        // node-fetch v2 的 body 是一个 Readable Stream
+        let aiFullResponse = ""; 
+        
         response.body.on('data', (chunk) => {
-            // A. 直接透传 chunk 给前端，保持极低延迟
             res.write(chunk);
-
-            // B. 解析 chunk 用于后端存储
-            // SSE 数据格式通常是 "data: {...}\n\n"
             const lines = chunk.toString().split('\n');
             for (const line of lines) {
                 if (line.startsWith('data: ')) {
@@ -345,36 +351,26 @@ app.post('/api/chat', async (req, res) => {
                         const json = JSON.parse(dataStr);
                         const content = json.choices?.[0]?.delta?.content || "";
                         aiFullResponse += content;
-                    } catch (e) {
-                        // 忽略解析错误（可能是 JSON 被截断在两个 chunk 之间）
-                        // 在生产环境中可以使用专门的 stream parser，但在单文件中做简单拼接通常足够
-                    }
+                    } catch (e) { }
                 }
             }
         });
 
         response.body.on('end', async () => {
-            res.end(); // 结束前端响应
-            
-            // 6. 存库与计费 (只有产生内容了才存)
+            res.end(); 
             if (aiFullResponse.trim()) {
                 try {
-                    // 更新使用统计
                     const usageCheck = await dbGet("SELECT * FROM usage WHERE user = ? AND model_id = ?", [user, presetId]);
                     if (usageCheck) await dbRun("UPDATE usage SET count = count + 1 WHERE user = ? AND model_id = ?", [user, presetId]);
                     else await dbRun("INSERT INTO usage (user, model_id, count) VALUES (?, ?, 1)", [user, presetId]);
 
-                    // 保存 AI 回复
                     await dbRun("INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)", 
                         [sessionId, 'assistant', aiFullResponse, Date.now()]);
-                } catch (dbErr) {
-                    console.error("Save chat error:", dbErr);
-                }
+                } catch (dbErr) { console.error("Save chat error:", dbErr); }
             }
         });
 
         response.body.on('error', (err) => {
-            console.error("Stream error:", err);
             if(!res.headersSent) res.status(500).json({error: "Stream error"});
             else res.end();
         });
@@ -396,7 +392,10 @@ app.get('/api/admin/data', async (req, res) => {
         if (!usage[row.user]) usage[row.user] = {};
         usage[row.user][row.model_id] = row.count;
     });
-    res.json({ success: true, presets, usage });
+    // 获取最新公告
+    const announcement = await dbGet("SELECT content, timestamp FROM announcements ORDER BY id DESC LIMIT 1");
+    
+    res.json({ success: true, presets, usage, announcement });
 });
 
 app.post('/api/admin/preset', async (req, res) => {
