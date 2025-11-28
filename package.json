@@ -1,7 +1,7 @@
 {
   "name": "ai-chat-admin",
-  "version": "2.0.0",
-  "description": "AI Chat",
+  "version": "3.0.0",
+  "description": "AI Chat with SQLite",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -10,6 +10,7 @@
     "express": "^4.18.2",
     "node-fetch": "^2.6.9",
     "cors": "^2.8.5",
-    "body-parser": "^1.20.2"
+    "body-parser": "^1.20.2",
+    "sqlite3": "^5.1.6"
   }
 }
