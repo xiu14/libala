@@ -13,8 +13,8 @@ const USERS = {
 };
 const ADMIN_USER = "libala"; // 定义管理员账号
 
-// --- 数据存储配置 ---
-const DATA_DIR = path.join(__dirname, 'data');
+// --- 数据存储配置 (已修复：指向 Volume 绝对路径) ---
+const DATA_DIR = '/app/data'; 
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 
 // 默认预设 (初始化数据库时使用)
@@ -26,6 +26,7 @@ const DEFAULT_PRESETS = [
 // --- 数据库操作封装 ---
 async function getDB() {
     try {
+        // 确保挂载点目录存在
         await fs.mkdir(DATA_DIR, { recursive: true });
         const data = await fs.readFile(DB_FILE, 'utf8');
         return JSON.parse(data);
@@ -41,7 +42,7 @@ async function getDB() {
     }
 }
 
-// --- 写入硬盘函数 (增加了日志诊断) ---
+// --- 写入硬盘函数 (包含日志诊断) ---
 async function saveDB(data) {
     try {
         await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
@@ -169,7 +170,7 @@ app.post('/api/admin/preset', async (req, res) => {
 // app.get 和 app.listen 替换为异步启动块
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// --- 强制初始化数据库并启动 ---
+// --- 强制初始化数据库并启动 (已修复) ---
 (async () => {
     // 确保数据库文件已创建或加载，然后才启动 HTTP 监听
     await getDB(); 
