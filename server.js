@@ -47,7 +47,6 @@ function initDB() {
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
             });
 
-            // 自动迁移逻辑 (保留作为启动检查)
             await checkAndMigrateData(false);
             checkDefaultPresets();
             resolve();
@@ -74,10 +73,7 @@ function dbAll(sql, params = []) {
 // --- 数据迁移逻辑 ---
 async function checkAndMigrateData(force = false) {
     try {
-        if (!fsDirect.existsSync(OLD_DB_FILE)) {
-            return { success: false, message: "未找到旧文件" };
-        }
-
+        if (!fsDirect.existsSync(OLD_DB_FILE)) return { success: false, message: "未找到旧文件" };
         if (!force) {
             const sessionCount = await dbGet("SELECT count(*) as count FROM sessions");
             if (sessionCount.count > 0) return { success: true, message: "数据库非空，跳过自动迁移" };
@@ -89,13 +85,11 @@ async function checkAndMigrateData(force = false) {
 
         db.serialize(() => {
             db.run("BEGIN TRANSACTION");
-            
             if (oldData.presets && Array.isArray(oldData.presets)) {
                 const stmt = db.prepare("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
                 oldData.presets.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon || '⚡'));
                 stmt.finalize();
             }
-
             if (oldData.usage) {
                 const stmt = db.prepare("INSERT OR REPLACE INTO usage (user, model_id, count) VALUES (?, ?, ?)");
                 for (const [user, usageMap] of Object.entries(oldData.usage)) {
@@ -105,19 +99,15 @@ async function checkAndMigrateData(force = false) {
                 }
                 stmt.finalize();
             }
-
             if (oldData.chats) {
                 const sessStmt = db.prepare("INSERT OR IGNORE INTO sessions (id, user, title, mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");
                 const msgStmt = db.prepare("INSERT OR IGNORE INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)");
-                
-                // 为了让排序稍微正常点，给迁移的数据加一个微小的毫秒偏移
                 let offset = 0;
                 for (const [user, sessions] of Object.entries(oldData.chats)) {
                     sessions.forEach((s, idx) => {
                         const sId = s.id || `sess_${Date.now()}_${idx}`;
-                        const now = Date.now() - (offset * 1000); // 稍微错开时间
+                        const now = Date.now() - (offset * 1000); 
                         offset++;
-                        
                         sessStmt.run(sId, user, s.title, s.mode, now, now);
                         if (s.messages && Array.isArray(s.messages)) {
                             s.messages.forEach(m => {
@@ -132,7 +122,6 @@ async function checkAndMigrateData(force = false) {
             }
             db.run("COMMIT");
         });
-        console.log("数据迁移成功完成！");
         return { success: true, message: "迁移成功" };
     } catch (e) {
         if (db) db.run("ROLLBACK");
@@ -174,7 +163,6 @@ app.get('/api/config', async (req, res) => {
 app.get('/api/sessions', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
-    // 按 updated_at 倒序，新对话在顶端
     const sessions = await dbAll("SELECT id, title, mode, updated_at FROM sessions WHERE user = ? ORDER BY updated_at DESC", [user]);
     res.json({ success: true, data: sessions });
 });
@@ -185,10 +173,7 @@ app.get('/api/session/:id', async (req, res) => {
     const sessionId = req.params.id;
     const session = await dbGet("SELECT * FROM sessions WHERE id = ? AND user = ?", [sessionId, user]);
     if (!session) return res.status(404).json({ success: false, message: "Session not found" });
-    
-    // !!! 关键修改：增加了 timestamp 字段 !!!
     const messages = await dbAll("SELECT role, content, timestamp FROM messages WHERE session_id = ? ORDER BY id ASC", [sessionId]);
-    
     const parsedMessages = messages.map(m => {
         try { return { role: m.role, content: JSON.parse(m.content), timestamp: m.timestamp }; } 
         catch (e) { return { role: m.role, content: m.content, timestamp: m.timestamp }; }
@@ -199,11 +184,9 @@ app.get('/api/session/:id', async (req, res) => {
 app.post('/api/session/new', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
-
     const { presetId, title } = req.body;
     const sessionId = 'sess-' + Date.now();
     const now = Date.now();
-
     try {
         const countRes = await dbGet("SELECT count(*) as count FROM sessions WHERE user = ?", [user]);
         if (countRes.count >= 100) {
@@ -238,6 +221,7 @@ app.post('/api/session/delete', async (req, res) => {
     res.json({ success: true });
 });
 
+// --- 核心修复：聊天接口 (修复计费逻辑) ---
 app.post('/api/chat', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ error: { message: "登录已过期" } });
@@ -249,10 +233,7 @@ app.post('/api/chat', async (req, res) => {
         const preset = await dbGet("SELECT * FROM presets WHERE id = ?", [presetId]);
         if (!preset) return res.status(400).json({ error: { message: "模型配置不存在" } });
 
-        const usageCheck = await dbGet("SELECT * FROM usage WHERE user = ? AND model_id = ?", [user, presetId]);
-        if (usageCheck) await dbRun("UPDATE usage SET count = count + 1 WHERE user = ? AND model_id = ?", [user, presetId]);
-        else await dbRun("INSERT INTO usage (user, model_id, count) VALUES (?, ?, 1)", [user, presetId]);
-
+        // 1. 先保存用户的提问（不管成功与否，用户的发言要记录）
         const lastMsg = messages[messages.length - 1];
         if (lastMsg && lastMsg.role === 'user') {
             const contentStr = typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content);
@@ -261,10 +242,14 @@ app.post('/api/chat', async (req, res) => {
             await dbRun("UPDATE sessions SET updated_at = ? WHERE id = ?", [now, sessionId]);
         }
 
+        // 2. 处理 URL
         let apiUrl = preset.url;
+        // 如果用户填写了完整的 .../chat/completions (比如火山引擎)，则不修改
+        // 如果用户只填写了域名 (如 https://api.openai.com)，则补全
         if (apiUrl.endsWith('/')) apiUrl = apiUrl.slice(0, -1);
         if (!apiUrl.includes('/chat/completions')) apiUrl += '/v1/chat/completions';
 
+        // 3. 发起请求
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${preset.key}` },
@@ -272,8 +257,16 @@ app.post('/api/chat', async (req, res) => {
         });
         
         const data = await response.json();
+        
+        // 4. 如果失败，直接返回错误，不计费
         if (!response.ok) return res.status(response.status).json(data);
 
+        // 5. 只有成功了，才增加计数 (移到了这里)
+        const usageCheck = await dbGet("SELECT * FROM usage WHERE user = ? AND model_id = ?", [user, presetId]);
+        if (usageCheck) await dbRun("UPDATE usage SET count = count + 1 WHERE user = ? AND model_id = ?", [user, presetId]);
+        else await dbRun("INSERT INTO usage (user, model_id, count) VALUES (?, ?, 1)", [user, presetId]);
+
+        // 6. 保存 AI 回复
         const aiContent = data.choices[0].message.content;
         await dbRun("INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)", 
             [sessionId, 'assistant', aiContent, Date.now()]);
@@ -288,7 +281,6 @@ app.get('/api/admin/data', async (req, res) => {
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
     const presets = await dbAll("SELECT * FROM presets");
     const usageRows = await dbAll("SELECT * FROM usage");
-    // 直接返回原始 usage 数据，由前端负责美化和映射名字
     const usage = {};
     usageRows.forEach(row => {
         if (!usage[row.user]) usage[row.user] = {};
