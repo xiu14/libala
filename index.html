@@ -44,11 +44,19 @@
         .sidebar-footer { padding: 15px; border-top: 1px solid var(--border-color); }
 
         #adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
-        .admin-panel { background: var(--bg-color); width: 95%; max-width: 600px; height: 85vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+        .admin-panel { background: var(--bg-color); width: 95%; max-width: 800px; height: 85vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
         .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); }
         .admin-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-        .stat-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .stat-table th, .stat-table td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        
+        /* 统计卡片样式优化 */
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; }
+        .stat-card { background: var(--chat-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; }
+        .stat-user-title { font-weight: bold; font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; color: var(--primary-color); }
+        .stat-item { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px dashed var(--border-color); }
+        .stat-item:last-child { border-bottom: none; }
+        .stat-name { color: var(--text-color); }
+        .stat-count { font-weight: bold; }
+        
         .preset-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: var(--chat-bg); border: 1px solid var(--border-color); margin-bottom: 8px; border-radius: 6px; }
 
         .main-chat { flex: 1; display: flex; flex-direction: column; background-color: var(--chat-bg); position: relative; width: 100%; }
@@ -57,7 +65,6 @@
         
         #chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
         
-        /* 气泡样式修复：移除 pre 导致的框中框 */
         .message { max-width: 85%; display: flex; flex-direction: column; gap: 4px; }
         .user-msg { align-self: flex-end; align-items: flex-end; }
         .ai-msg { align-self: flex-start; align-items: flex-start; }
@@ -65,11 +72,13 @@
             padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.6; 
             box-shadow: 0 1px 2px rgba(0,0,0,0.05); word-wrap: break-word; overflow-wrap: break-word; 
             max-width: 100%; 
-            white-space: pre-wrap; /* 关键修复：保持换行但不要 pre 框 */
+            white-space: pre-wrap; 
         }
         .user-msg .message-content { background: var(--my-msg-bg); color: var(--my-msg-text); border-bottom-right-radius: 4px; }
         .ai-msg .message-content { background: var(--ai-msg-bg); color: var(--ai-msg-text); border-bottom-left-radius: 4px; }
         .message img { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; }
+        /* 时间戳样式 */
+        .msg-time { font-size: 10px; color: var(--token-text); margin-top: 2px; padding: 0 2px; }
         
         .input-wrapper { padding: 15px 20px; background: var(--chat-bg); width: 100%; padding-bottom: max(15px, env(safe-area-inset-bottom)); flex-shrink: 0; }
         .input-container { display: flex; align-items: flex-end; gap: 8px; background: var(--bg-color); padding: 8px 10px; border-radius: 16px; border: 1px solid var(--border-color); width: 100%; transition: border-color 0.2s; }
@@ -115,13 +124,8 @@
         </div>
         <div class="admin-body">
             <div>
-                <h4 style="margin-bottom:10px; color:var(--primary-color);">📊 调用统计</h4>
-                <div style="border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">
-                    <table class="stat-table" id="statTable">
-                        <thead style="background:var(--ai-msg-bg);"><tr><th>用户</th><th>模型</th><th>次数</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
+                <h4 style="margin-bottom:10px; color:var(--primary-color);">📊 调用统计 (按用户)</h4>
+                <div id="statGrid" class="stat-grid"></div>
             </div>
             
             <div>
@@ -139,8 +143,6 @@
                     <button class="login-btn" style="padding:8px;" onclick="savePreset()" id="savePresetBtn">添加预设</button>
                     <button onclick="resetPresetForm()" style="margin-top:5px; padding:8px; background:transparent; border:none; color:var(--token-text); cursor:pointer;">重置表单</button>
                 </div>
-
-                <!-- 紧急数据恢复 -->
                 <hr style="margin: 20px 0; border:0; border-top:1px solid var(--border-color);">
                 <div style="text-align:center;">
                     <button onclick="forceMigrate()" style="background:#fee2e2; color:#ef4444; border:1px solid #ef4444; padding:8px 15px; border-radius:8px; cursor:pointer; font-size:12px;">⚠️ 从旧 database.json 导入数据 (若数据丢失请点此)</button>
@@ -272,11 +274,12 @@
                     else {
                         msg.content.forEach(c => { if (c.type === 'text') text += c.text; if (c.type === 'image_url') imgs.push(c.image_url.url); });
                     }
-                    appendUI(null, msg.role, text, imgs);
+                    // 传递 timestamp
+                    appendUI(null, msg.role, text, imgs, false, msg.timestamp);
                 });
                 if(window.innerWidth < 1000) { document.getElementById('sidebar').classList.remove('open'); document.querySelector('.overlay').classList.remove('show'); }
             }
-            fetchSessions(); // 刷新高亮
+            fetchSessions();
         } catch(e) { document.getElementById('chat-box').innerHTML = "加载失败"; }
     }
 
@@ -314,7 +317,7 @@
         });
         if (text) payload.push({ type: "text", text });
 
-        appendUI(null, "user", text + (uploadedFiles.length > 0 ? `\n(📎 ${uploadedFiles.length} 附件)` : ""), uploadedFiles.filter(f=>f.type.startsWith('image/')).map(f=>f.data));
+        appendUI(null, "user", text + (uploadedFiles.length > 0 ? `\n(📎 ${uploadedFiles.length} 附件)` : ""), uploadedFiles.filter(f=>f.type.startsWith('image/')).map(f=>f.data), false, Date.now());
         
         input.value = ''; uploadedFiles = []; renderPreviews(); isRequesting = true;
         const sendBtn = document.getElementById('sendBtn'); sendBtn.disabled = true; sendBtn.style.opacity = '0.5';
@@ -324,31 +327,52 @@
             const sessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
             const sessData = await sessRes.json();
             let msgs = sessData.messages || [];
-            msgs.push({ role: "user", content: payload });
+            // 过滤掉 messages 里的 timestamp 字段再发给 AI，以免 AI 报错
+            const cleanMsgs = msgs.map(m => ({ role: m.role, content: m.content }));
+            cleanMsgs.push({ role: "user", content: payload });
 
             const res = await fetch('/api/chat', {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-                body: JSON.stringify({ sessionId: currentSessionId, presetId: sessData.session.mode, messages: msgs })
+                body: JSON.stringify({ sessionId: currentSessionId, presetId: sessData.session.mode, messages: cleanMsgs })
             });
             const data = await res.json();
             document.getElementById(loadId).remove();
             if (!res.ok) throw new Error(data.error?.message || "Error");
-            appendUI(null, "ai", data.choices[0].message.content);
+            appendUI(null, "ai", data.choices[0].message.content, [], false, Date.now());
             fetchSessions();
         } catch (e) { document.getElementById(loadId).remove(); appendUI(null, "ai", "Error: " + e.message); }
         finally { isRequesting = false; sendBtn.disabled = false; sendBtn.style.opacity = '1'; }
     }
 
-    function appendUI(id, role, text, images = [], isLoading = false) {
+    // 格式化时间函数
+    function formatTime(ts) {
+        if (!ts) return '';
+        const date = new Date(ts);
+        const y = date.getFullYear();
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const d = date.getDate().toString().padStart(2, '0');
+        const h = date.getHours().toString().padStart(2, '0');
+        const min = date.getMinutes().toString().padStart(2, '0');
+        return `${y}-${m}-${d} ${h}:${min}`;
+    }
+
+    function appendUI(id, role, text, images = [], isLoading = false, timestamp = null) {
         const box = document.getElementById('chat-box');
         const div = document.createElement('div');
         div.className = `message ${role === 'user' ? 'user-msg' : 'ai-msg'}`;
         div.id = id || ('msg-' + Date.now());
+        
         let content = `<div class="message-content">`;
         if (images && images.length > 0) images.forEach(u => content += `<img src="${u}"><br>`);
         if (isLoading) content += `<span style="color:#999">Thinking...</span>`;
-        else if (text) content += text; // 移除 <pre>，依靠 CSS white-space
+        else if (text) content += text;
         content += `</div>`;
+        
+        // 添加时间戳
+        if (timestamp) {
+            content += `<div class="msg-time">${formatTime(timestamp)}</div>`;
+        }
+        
         div.innerHTML = content;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
@@ -387,12 +411,45 @@
         const res = await fetch('/api/admin/data', { headers: { 'Authorization': `Bearer ${authToken}` } });
         const data = await res.json();
         
-        const tbody = document.querySelector('#statTable tbody'); tbody.innerHTML = '';
-        if (data.usage) { for (const [u, usg] of Object.entries(data.usage)) { for (const [m, c] of Object.entries(usg)) tbody.innerHTML += `<tr><td>${u}</td><td>${m}</td><td>${c}</td></tr>`; } }
+        // 渲染统计 - 卡片式布局
+        const grid = document.getElementById('statGrid');
+        grid.innerHTML = '';
+        
+        if (data.usage) {
+            for (const [user, usage] of Object.entries(data.usage)) {
+                // 计算该用户总次数
+                let total = 0;
+                let listHtml = '';
+                for (const [mid, count] of Object.entries(usage)) {
+                    total += count;
+                    // 尝试匹配预设名字
+                    const preset = PRESETS.find(p => p.id === mid);
+                    const displayName = preset ? `${preset.icon} ${preset.name}` : `<span style="color:#999;font-style:italic;">⚠️ 已删模型 (${mid.substring(0,6)}...)</span>`;
+                    
+                    listHtml += `
+                        <div class="stat-item">
+                            <span class="stat-name">${displayName}</span>
+                            <span class="stat-count">${count}</span>
+                        </div>
+                    `;
+                }
 
+                const card = document.createElement('div');
+                card.className = 'stat-card';
+                card.innerHTML = `
+                    <div class="stat-user-title">
+                        <span>👤 ${user}</span>
+                        <span style="font-size:12px; background:#e0e7ff; color:var(--primary-color); padding:2px 8px; border-radius:10px;">共 ${total} 次</span>
+                    </div>
+                    <div>${listHtml}</div>
+                `;
+                grid.appendChild(card);
+            }
+        }
+
+        // 渲染预设列表 (保持不变)
         const pList = document.getElementById('adminPresetList'); pList.innerHTML = '';
         data.presets.forEach(p => {
-            // 将对象数据转为 JSON 字符串存储在 data-preset 属性中，方便编辑时读取
             const presetJson = JSON.stringify(p).replace(/"/g, '&quot;');
             pList.innerHTML += `
                 <div class="preset-row">
@@ -405,7 +462,6 @@
         });
     }
 
-    // 编辑预设逻辑
     function editPreset(jsonStr) {
         const p = JSON.parse(jsonStr);
         document.getElementById('addId').value = p.id;
@@ -414,7 +470,6 @@
         document.getElementById('addUrl').value = p.url;
         document.getElementById('addKey').value = p.key;
         document.getElementById('addModelId').value = p.modelId;
-        
         document.getElementById('addFormTitle').innerText = "编辑预设: " + p.name;
         document.getElementById('savePresetBtn').innerText = "保存修改";
     }
@@ -433,14 +488,8 @@
         const key = document.getElementById('addKey').value;
         const modelId = document.getElementById('addModelId').value;
         const desc = document.getElementById('addDesc').value;
-        
         if(!name || !url || !key || !modelId) return alert("请填写完整");
-        
-        await fetch('/api/admin/preset', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, 
-            body: JSON.stringify({ id, name, url, key, modelId, desc }) 
-        });
+        await fetch('/api/admin/preset', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id, name, url, key, modelId, desc }) });
         alert("保存成功"); resetPresetForm(); openAdmin(); fetchPresets();
     }
 
@@ -450,15 +499,13 @@
         openAdmin(); fetchPresets();
     }
 
-    // 强制迁移数据
     async function forceMigrate() {
-        if(!confirm("⚠️ 确定要从旧的 database.json 导入数据吗？\n\n这通常用于部署后发现数据丢失的情况。\n如果数据已经存在，请不要重复操作。")) return;
+        if(!confirm("⚠️ 确定要从旧的 database.json 导入数据吗？")) return;
         const btn = event.target; btn.disabled = true; btn.innerText = "导入中...";
         try {
             const res = await fetch('/api/admin/migrate', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } });
             const json = await res.json();
-            alert(json.message);
-            location.reload();
+            alert(json.message); location.reload();
         } catch(e) { alert("导入失败: " + e.message); }
         finally { btn.disabled = false; btn.innerText = "⚠️ 从旧 database.json 导入数据"; }
     }
