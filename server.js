@@ -13,7 +13,7 @@ const USERS = {
 };
 const ADMIN_USER = "libala"; // 定义管理员账号
 
-// --- 数据存储配置 (已修复：指向 Volume 绝对路径) ---
+// --- 数据存储配置 (指向 Volume 绝对路径) ---
 const DATA_DIR = '/app/data'; 
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 
@@ -26,7 +26,6 @@ const DEFAULT_PRESETS = [
 // --- 数据库操作封装 ---
 async function getDB() {
     try {
-        // 确保挂载点目录存在
         await fs.mkdir(DATA_DIR, { recursive: true });
         const data = await fs.readFile(DB_FILE, 'utf8');
         return JSON.parse(data);
@@ -42,7 +41,7 @@ async function getDB() {
     }
 }
 
-// --- 写入硬盘函数 (包含日志诊断) ---
+// --- 写入硬盘函数 ---
 async function saveDB(data) {
     try {
         await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
@@ -59,7 +58,7 @@ app.use(express.static(path.join(__dirname, '.')));
 
 const tokenMap = new Map(); // Token -> Username
 
-// 1. 登录接口 (返回是否为管理员)
+// 1. 登录接口
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
     if (USERS[username] && USERS[username] === password) {
@@ -101,7 +100,7 @@ app.post('/api/chat', async (req, res) => {
     if (!db.usage[username]) db.usage[username] = {};
     if (!db.usage[username][preset.id]) db.usage[username][preset.id] = 0;
     db.usage[username][preset.id]++;
-    await saveDB(db); // 保存统计数据
+    await saveDB(db); 
     // ----------------
 
     let apiUrl = preset.url;
@@ -167,12 +166,18 @@ app.post('/api/admin/preset', async (req, res) => {
     res.json({ success: true });
 });
 
-// app.get 和 app.listen 替换为异步启动块
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+// --- 最终的启动代码 (加入了强制不缓存) ---
 
-// --- 强制初始化数据库并启动 (已修复) ---
+app.get('/', (req, res) => {
+    // 强制浏览器不要缓存 index.html，保证每次都是新代码
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// --- 强制初始化数据库并启动 ---
 (async () => {
-    // 确保数据库文件已创建或加载，然后才启动 HTTP 监听
     await getDB(); 
     
     app.listen(PORT, () => {
