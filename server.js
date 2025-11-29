@@ -9,7 +9,7 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 
-// --- 1. 动态账号配置 (保留用于同步) ---
+// --- 1. 动态账号配置 ---
 const USERS = {};
 let userCount = 0;
 for (const key in process.env) {
@@ -37,7 +37,6 @@ app.use(express.static(path.join(__dirname, '.')));
 // --- 辅助函数：获取标准北京时间字符串 ---
 function getBeijingTime() {
     const now = new Date();
-    // 计算 UTC+8 偏移
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
     const bjMs = utc + (3600000 * 8);
     const date = new Date(bjMs);
@@ -51,8 +50,8 @@ function getBeijingTime() {
     const weekday = ['日', '一', '二', '三', '四', '五', '六'][date.getDay()];
     
     return {
-        full: `${yyyy}-${mm}-${dd} ${hh}:${min}`, // 2025-11-29 21:42
-        desc: `${yyyy}年${mm}月${dd}日 ${hh}:${min} 星期${weekday}` // 用于喂给 AI
+        full: `${yyyy}-${mm}-${dd} ${hh}:${min}`,
+        desc: `${yyyy}年${mm}月${dd}日 ${hh}:${min} 星期${weekday}`
     };
 }
 
@@ -69,18 +68,24 @@ function initDB() {
                 db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE)`);
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
                 db.run(`CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT, timestamp INTEGER)`);
-                
-                // --- 新增：用户表 ---
                 db.run(`CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, is_admin INTEGER DEFAULT 0)`);
                 
+                // --- 新增：邀请码相关表 ---
+                // system_config: 存储全局配置，如 invite_required
+                db.run(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT)`);
+                // invites: 存储邀请码
+                db.run(`CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, created_at INTEGER, used_by TEXT, used_at INTEGER)`);
+                
+                // 初始化默认配置 (默认关闭邀请制)
+                db.run(`INSERT OR IGNORE INTO system_config (key, value) VALUES ('invite_required', 'false')`);
+
                 db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user)`);
                 db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at)`);
                 db.run(`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)`);
             });
             
-            // 启动时同步任务
             await checkAndMigrateData(false);
-            await syncEnvUsersToDB(); // 同步环境变量用户
+            await syncEnvUsersToDB();
             checkDefaultPresets();
             
             resolve();
@@ -93,28 +98,12 @@ function dbGet(sql, params = []) { return new Promise((resolve, reject) => { db.
 function dbAll(sql, params = []) { return new Promise((resolve, reject) => { db.all(sql, params, (err, rows) => { if (err) reject(err); else resolve(rows); }); }); }
 
 // --- 辅助逻辑 ---
-// 将环境变量里的账号同步到数据库（只在启动时运行）
 function syncEnvUsersToDB() {
     return new Promise((resolve) => {
         const stmt = db.prepare("INSERT OR IGNORE INTO users (username, password, is_admin) VALUES (?, ?, ?)");
-        
-        // 同步普通账号 (ACC_前缀)
-        for (const user in USERS) {
-            stmt.run(user, USERS[user], 0);
-        }
-        
-        // 同步管理员权限
-        // 如果 ADMIN_USER 在 users 表中，将其设为管理员
-        if (ADMIN_USER) {
-            // 先尝试更新现有用户
-            db.run("UPDATE users SET is_admin = 1 WHERE username = ?", [ADMIN_USER], (err) => {
-               // 如果该用户不存在于数据库且存在于环境变量中，上面的 INSERT OR IGNORE 已经处理了插入
-               // 如果是纯新的管理员账号逻辑，这里保持简单即可
-            });
-        }
-        
+        for (const user in USERS) { stmt.run(user, USERS[user], 0); }
+        if (ADMIN_USER) { db.run("UPDATE users SET is_admin = 1 WHERE username = ?", [ADMIN_USER], (err) => {}); }
         stmt.finalize();
-        console.log("Environment users synced to DB.");
         resolve();
     });
 }
@@ -184,49 +173,111 @@ async function searchGoogle(query) {
 // --- API ---
 const tokenMap = new Map();
 
-// 新增：注册接口
+// 获取当前系统状态 (是否需要邀请码) - 公开接口
+app.get('/api/system/status', async (req, res) => {
+    const config = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
+    const inviteRequired = config ? config.value === 'true' : false;
+    res.json({ success: true, inviteRequired });
+});
+
+// 修改：注册接口 (集成邀请码逻辑)
 app.post('/api/register', async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, inviteCode } = req.body;
     
     if (!username || !password) return res.json({ success: false, message: "账号或密码不能为空" });
     if (username.length < 3) return res.json({ success: false, message: "账号至少需要3个字符" });
 
-    // 检查是否已存在
+    // 1. 检查是否开启邀请制
+    const config = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
+    const isInviteRequired = config && config.value === 'true';
+
+    // 2. 如果开启，验证邀请码
+    if (isInviteRequired) {
+        if (!inviteCode) return res.json({ success: false, message: "本站已开启邀请注册，请输入邀请码" });
+        const invite = await dbGet("SELECT * FROM invites WHERE code = ? AND used_by IS NULL", [inviteCode.trim()]);
+        if (!invite) return res.json({ success: false, message: "邀请码无效或已被使用" });
+    }
+
+    // 3. 检查用户是否存在
     const exist = await dbGet("SELECT username FROM users WHERE username = ?", [username]);
     if (exist) return res.json({ success: false, message: "该账号已被注册" });
 
     try {
-        // 插入新用户 (默认非管理员)
-        await dbRun("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 0)", [username, password]);
-        res.json({ success: true, message: "注册成功，请登录" });
+        db.serialize(async () => {
+            db.run("BEGIN TRANSACTION");
+            // 4. 创建用户
+            db.run("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 0)", [username, password]);
+            
+            // 5. 如果使用了邀请码，标记为已使用
+            if (isInviteRequired && inviteCode) {
+                db.run("UPDATE invites SET used_by = ?, used_at = ? WHERE code = ?", [username, Date.now(), inviteCode.trim()]);
+            }
+            db.run("COMMIT", (err) => {
+                if (err) {
+                    console.error(err);
+                    res.status(500).json({ success: false, message: "注册事务失败" });
+                } else {
+                    res.json({ success: true, message: "注册成功，请登录" });
+                }
+            });
+        });
     } catch (e) {
+        if(db) db.run("ROLLBACK");
         res.status(500).json({ success: false, message: "注册失败: " + e.message });
     }
 });
 
-// 修改：登录接口
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
-    
-    // 1. 优先查询数据库
     const userRow = await dbGet("SELECT * FROM users WHERE username = ? AND password = ?", [username, password]);
-    
-    // 2. 兼容旧的环境变量逻辑 (作为后备，或如果同步未完成)
     const isEnvUser = USERS[username] && USERS[username] === password;
 
     if (userRow || isEnvUser) {
         const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
         tokenMap.set(token, username);
-        
-        // 判断是否为管理员
         const isAdmin = (userRow && userRow.is_admin === 1) || (username === ADMIN_USER);
-        
         res.json({ success: true, token, isAdmin: isAdmin });
     } else {
         res.status(401).json({ success: false, message: "账号或密码错误" });
     }
 });
 
+// --- 管理员邀请码接口 ---
+app.get('/api/admin/invite/info', async (req, res) => {
+    const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
+    if (user !== ADMIN_USER) return res.status(403).json({ success: false });
+
+    const config = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
+    const inviteRequired = config ? config.value === 'true' : false;
+    
+    // 获取未使用的邀请码
+    const codes = await dbAll("SELECT code FROM invites WHERE used_by IS NULL ORDER BY created_at DESC");
+    res.json({ success: true, inviteRequired, codes: codes.map(c => c.code) });
+});
+
+app.post('/api/admin/invite/toggle', async (req, res) => {
+    const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
+    if (user !== ADMIN_USER) return res.status(403).json({ success: false });
+
+    const current = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
+    const newVal = (current && current.value === 'true') ? 'false' : 'true';
+    
+    await dbRun("INSERT OR REPLACE INTO system_config (key, value) VALUES ('invite_required', ?)", [newVal]);
+    res.json({ success: true, inviteRequired: newVal === 'true' });
+});
+
+app.post('/api/admin/invite/generate', async (req, res) => {
+    const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
+    if (user !== ADMIN_USER) return res.status(403).json({ success: false });
+
+    // 生成6位大写随机码
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    await dbRun("INSERT INTO invites (code, created_at) VALUES (?, ?)", [code, Date.now()]);
+    res.json({ success: true, code });
+});
+
+
+// --- 其他 API (Config, Sessions, Chat 等保持不变) ---
 app.get('/api/config', async (req, res) => {
     const presets = await dbAll("SELECT id, name, desc, icon FROM presets");
     res.json({ success: true, presets });
@@ -318,11 +369,8 @@ app.post('/api/admin/announcement', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
     let { content } = req.body;
-    
-    // 1. 强制附加北京时间
     const bjTime = getBeijingTime();
     content += `\n\n> 发布于 ${bjTime.full}`;
-
     await dbRun("INSERT INTO announcements (content, timestamp) VALUES (?, ?)", [content, Date.now()]);
     res.json({ success: true });
 });
@@ -353,15 +401,8 @@ app.post('/api/chat', async (req, res) => {
         }
 
         let finalMsgs = [...messages];
-
-        // 2. 强制注入当前北京时间 (无论是否搜索，AI都需要知道时间)
         const bjTime = getBeijingTime();
-        const timeContext = {
-            role: 'system',
-            content: `当前北京时间: ${bjTime.desc}。`
-        };
-        
-        // 将时间提示放在最前面
+        const timeContext = { role: 'system', content: `当前北京时间: ${bjTime.desc}。` };
         finalMsgs.unshift(timeContext);
 
         if (useSearch && lastMsg && lastMsg.role === 'user') {
@@ -369,7 +410,6 @@ app.post('/api/chat', async (req, res) => {
             if (q) {
                 const sRes = await searchGoogle(q);
                 if (sRes) {
-                    // 插入搜索结果
                     finalMsgs.splice(finalMsgs.length-1, 0, { 
                         role: 'system', 
                         content: `[联网搜索结果]:\n${sRes}\n请结合上述搜索结果回答用户问题。` 
