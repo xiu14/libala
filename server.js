@@ -229,9 +229,14 @@ app.post('/api/admin/announcement', async (req, res) => {
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
     let { content } = req.body;
     
-    // 自动追加时间
+    // --- 修复：强制计算北京时间 (UTC+8) ---
     const now = new Date();
-    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    // 将当前UTC时间戳 + 8小时毫秒数
+    const offset = 8;
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const bjDate = new Date(utc + (3600000 * offset));
+    
+    const timeStr = `${bjDate.getFullYear()}-${String(bjDate.getMonth()+1).padStart(2,'0')}-${String(bjDate.getDate()).padStart(2,'0')} ${String(bjDate.getHours()).padStart(2,'0')}:${String(bjDate.getMinutes()).padStart(2,'0')}`;
     content += `\n\n> 发布于 ${timeStr}`;
 
     await dbRun("INSERT INTO announcements (content, timestamp) VALUES (?, ?)", [content, Date.now()]);
