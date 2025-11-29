@@ -7,9 +7,9 @@
     --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
 }
 
-/* --- 修改重点：全新的深色/赛博朋克模式配色 --- */
+/* --- 深色/赛博朋克模式配色 --- */
 [data-theme="dark"] { 
-    /* 背景色：改为深色半透明，以便透出底部的紫色光晕 */
+    /* 基础背景色：改为深色半透明，以便透出底部的紫色光晕 */
     --bg-color: #0c0c16; 
     --chat-bg: rgba(12, 12, 22, 0.6); 
     --sidebar-bg: rgba(20, 16, 35, 0.7); 
@@ -39,8 +39,28 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
 body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-color); overflow: hidden; position: fixed; width: 100%; }
 
+/* 1. 全局背景：应用登录页的紫色极光渐变 */
+[data-theme="dark"] body {
+    background: radial-gradient(circle at 30% 20%, #2a2340, #0c0c16);
+    background-attachment: fixed; 
+}
+
 .icon-btn { background: transparent; border: none; cursor: pointer; color: var(--text-secondary); padding: 8px; border-radius: 6px; transition: var(--transition); display: flex; align-items: center; justify-content: center; }
 .icon-btn:hover { background: rgba(0,0,0,0.05); color: var(--text-color); }
+
+/* 2. 容器毛玻璃效果：让渐变背景隐约透出来 */
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .app-container,
+[data-theme="dark"] .chat-header, 
+[data-theme="dark"] .input-wrapper {
+    backdrop-filter: blur(20px); 
+    -webkit-backdrop-filter: blur(20px);
+}
+[data-theme="dark"] .icon-btn:hover {
+    background: rgba(156, 116, 255, 0.2);
+    color: #fff;
+}
+[data-theme="dark"] .session-item:hover { background: rgba(255,255,255,0.03); }
 
 /* 基础样式 (登录页主要由 index.html 的内联样式覆盖，这里保留基础结构) */
 #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; }
@@ -71,8 +91,14 @@ body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, Bl
 .session-group { margin-bottom: 20px; }
 .group-header { font-size: 11px; color: var(--text-secondary); margin: 0 0 6px 8px; font-weight: 600; }
 .session-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: space-between; color: var(--text-color); margin-bottom: 2px; }
-.session-item:hover { background: rgba(0,0,0,0.03); } 
 .session-item.active { background: var(--chat-bg); color: var(--text-color); font-weight: 600; border: 1px solid var(--border-color); }
+
+/* 4. 优化侧边栏选中项：使用紫色高亮 */
+[data-theme="dark"] .session-item.active {
+    background: rgba(156, 116, 255, 0.15);
+    border-color: #9c74ff;
+    color: #fff;
+}
 .session-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px; display: flex; align-items: center; gap: 8px; }
 .session-actions { display: none; gap: 2px; }
 .session-item:hover .session-actions, .session-item.active .session-actions { display: flex; }
@@ -84,6 +110,10 @@ body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, Bl
 
 .main-chat { flex: 1; display: flex; flex-direction: column; background-color: var(--chat-bg); position: relative; width: 100%; }
 .chat-header { padding: 0 20px; height: 64px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background-color: var(--chat-bg); z-index: 10; flex-shrink: 0; }
+/* 3. 让聊天页标题也带光晕 */
+[data-theme="dark"] #headerTitle {
+    text-shadow: 0 0 10px rgba(156, 116, 255, 0.5);
+}
 
 #chat-box { flex: 1; overflow-y: auto; padding: 20px 0; display: flex; flex-direction: column; gap: 24px; scroll-behavior: smooth; }
 .message-row { display: flex; width: 100%; padding: 0 20px; gap: 12px; }
@@ -101,7 +131,16 @@ body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, Bl
 
 .input-wrapper { padding: 16px 20px; background: var(--chat-bg); width: 100%; padding-bottom: max(16px, env(safe-area-inset-bottom)); flex-shrink: 0; }
 .input-box { display: flex; align-items: flex-end; gap: 8px; background: var(--bg-color); padding: 8px; border-radius: 12px; border: 1px solid var(--border-color); transition: border-color 0.2s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
-.input-box:focus-within { border-color: var(--text-secondary); }
+/* 3. 优化输入框：使其像登录页输入框一样（半透明+边框光晕） */
+[data-theme="dark"] .input-box {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(156, 116, 255, 0.3);
+}
+[data-theme="dark"] .input-box:focus-within {
+    border-color: #9c74ff;
+    box-shadow: 0 0 15px rgba(156, 116, 255, 0.2);
+}
+
 textarea { flex: 1; background: transparent; border: none; outline: none; resize: none; color: var(--text-color); font-size: 15px; max-height: 150px; overflow-y: auto; padding: 10px 4px; line-height: 1.5; font-family: inherit; }
 .send-btn { background: var(--text-color); color: var(--bg-color); width: 36px; height: 36px; border-radius: 8px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: opacity 0.2s; }
 .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -124,46 +163,3 @@ textarea { flex: 1; background: transparent; border: none; outline: none; resize
 .accordion-item.active .accordion-body { display: block; }
 .announce-content { line-height: 1.6; color: var(--text-color); font-size: 15px; max-height: 60vh; overflow-y: auto; padding: 20px; }
 @media (max-width: 768px) { .sidebar { width: 85%; max-width: 320px; } .chat-header { padding: 0 16px; height: 56px; } .input-wrapper { padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); } }
-
-/* --- 补充：深色模式专属样式 --- */
-/* 1. 全局背景：应用登录页的紫色极光渐变 */
-[data-theme="dark"] body {
-    background: radial-gradient(circle at 30% 20%, #2a2340, #0c0c16);
-    background-attachment: fixed; 
-}
-
-/* 2. 容器毛玻璃效果：让渐变背景隐约透出来 */
-[data-theme="dark"] .sidebar,
-[data-theme="dark"] .app-container,
-[data-theme="dark"] .chat-header, 
-[data-theme="dark"] .input-wrapper {
-    backdrop-filter: blur(20px); 
-    -webkit-backdrop-filter: blur(20px);
-}
-
-/* 3. 优化输入框：使其像登录页输入框一样 */
-[data-theme="dark"] .input-box {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(156, 116, 255, 0.3);
-}
-
-[data-theme="dark"] .input-box:focus-within {
-    border-color: #9c74ff;
-    box-shadow: 0 0 15px rgba(156, 116, 255, 0.2);
-}
-
-/* 4. 优化侧边栏选中项：使用紫色高亮 */
-[data-theme="dark"] .session-item.active {
-    background: rgba(156, 116, 255, 0.15);
-    border-color: #9c74ff;
-    color: #fff;
-}
-
-[data-theme="dark"] .icon-btn:hover {
-    background: rgba(156, 116, 255, 0.2);
-    color: #fff;
-}
-
-[data-theme="dark"] #headerTitle {
-    text-shadow: 0 0 10px rgba(156, 116, 255, 0.5);
-}
