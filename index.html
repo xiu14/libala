@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>AI Workspace</title>
+    
+    <!-- ⚡️ 核心修改：预加载 Logo 图片 -->
+    <!-- 这会让浏览器在处理 CSS 和 JS 之前就开始下载图片，实现“秒开” -->
+    <link rel="preload" as="image" href="logo.png">
+
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -11,7 +16,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="style.css">
     
-    <!-- 登录页专用样式 (移植自 g.html 并适配移动端) -->
+    <!-- 登录页专用样式 -->
     <style>
         #login-screen {
             background: radial-gradient(circle at 30% 20%, #2a2340, #0c0c16) !important;
@@ -150,7 +155,7 @@
 <body>
 
 <div id="login-screen">
-    <!-- 请确保将你的图片重命名为 logo.png 并放在同一目录下 -->
+    <!-- 请确保 logo.png 存在 -->
     <img src="logo.png" alt="黎吧啦AI" class="login-logo">
 
     <div class="login-title-text">Welcome to 黎吧啦 AI Station</div>
@@ -163,8 +168,8 @@
         <!-- 注册专用：确认密码 -->
         <input type="password" id="loginPassConfirm" class="login-input" placeholder="再说一遍暗号。" style="display:none;">
         
-        <!-- 注册专用：邀请码 (新增) -->
-        <input type="text" id="regInviteCode" class="login-input" placeholder="输入邀请码 (必填)" style="display:none;">
+        <!-- 注册专用：邀请码 -->
+        <input type="text" id="regInviteCode" class="login-input" placeholder="邀请码 (必填)" style="display:none;">
         
         <button class="login-btn" id="actionBtn" onclick="handleSubmit()">进入站点</button>
         
@@ -215,7 +220,7 @@
                 </div>
             </div>
 
-            <!-- 2. 邀请码管理 (新增) -->
+            <!-- 2. 邀请码管理 -->
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this); fetchInviteInfo();">
                     <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="ticket"></i> 邀请码管理</span>
@@ -226,7 +231,6 @@
                         <span style="font-size:14px; font-weight:500;">启用注册邀请制</span>
                         <div style="display:flex; align-items:center; gap:8px;">
                             <span id="inviteStatusText" style="font-size:12px; color:var(--text-secondary);">已关闭</span>
-                            <!-- 简单的开关按钮模拟 -->
                             <button id="inviteToggleBtn" onclick="toggleInviteSystem()" class="login-btn" style="width:auto; padding:6px 16px; font-size:12px; background:var(--text-secondary)!important;">开启</button>
                         </div>
                     </div>
@@ -235,8 +239,8 @@
                         <button class="login-btn" style="flex:1;" onclick="generateInviteCode()">🎲 生成随机邀请码</button>
                     </div>
 
-                    <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">有效邀请码列表 (点击复制)</div>
-                    <div id="inviteCodeList" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:8px;"></div>
+                    <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">有效邀请码列表 (点击可复制)</div>
+                    <div id="inviteCodeList" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:8px;"></div>
                 </div>
             </div>
 
