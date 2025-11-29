@@ -9,8 +9,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <!-- 引入分离的样式和脚本 -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -47,17 +45,20 @@
         </div>
         <div class="admin-body" style="flex:1; overflow-y:auto; padding:24px;">
             
-            <!-- 折叠 1: 发布公告 -->
+            <!-- 折叠 1: 公告管理 -->
             <div class="accordion-item">
-                <div class="accordion-header" onclick="toggleAccordion(this)">
-                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="megaphone"></i> 发布新公告</span>
+                <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminAnnouncements();">
+                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="megaphone"></i> 公告管理</span>
                     <i data-lucide="chevron-down"></i>
                 </div>
                 <div class="accordion-body">
-                    <div style="margin-bottom:10px; font-size:13px; color:var(--text-secondary);">支持 Markdown 格式。发布后用户下次登录时可见。</div>
-                    <textarea id="announceInput" class="login-input" style="height:100px; resize:vertical;" placeholder="请输入公告内容..."></textarea>
-                    <div style="text-align:right;">
-                        <button class="login-btn" style="width:auto; padding:8px 20px;" onclick="postAnnouncement()">发布公告</button>
+                    <textarea id="announceInput" class="login-input" style="height:80px; resize:vertical;" placeholder="发布新公告 (自动追加当前时间)"></textarea>
+                    <div style="text-align:right; margin-bottom:16px;">
+                        <button class="login-btn" style="width:auto; padding:8px 20px;" onclick="postAnnouncement()">发布</button>
+                    </div>
+                    <div style="border-top:1px solid var(--border-color); padding-top:12px;">
+                        <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">历史公告</div>
+                        <div id="adminAnnounceList" style="display:flex; flex-direction:column; gap:8px;"></div>
                     </div>
                 </div>
             </div>
@@ -81,12 +82,11 @@
                 </div>
                 <div class="accordion-body">
                     <div id="adminPresetList" style="margin-bottom:16px; display:flex; flex-direction:column; gap:8px;"></div>
-                    
                     <div style="background:var(--bg-color); padding:16px; border-radius:8px; border:1px solid var(--border-color); margin-top:16px;">
                         <div style="font-weight:600; margin-bottom:12px; font-size:14px;" id="addFormTitle">添加新预设</div>
                         <input type="hidden" id="addId">
                         <div style="display:grid; gap:12px;">
-                            <input type="text" id="addName" class="login-input" style="margin:0" placeholder="显示名称 (如: DeepSeek)">
+                            <input type="text" id="addName" class="login-input" style="margin:0" placeholder="显示名称">
                             <input type="text" id="addDesc" class="login-input" style="margin:0" placeholder="描述">
                             <input type="text" id="addUrl" class="login-input" style="margin:0" placeholder="API Base URL">
                             <input type="text" id="addKey" class="login-input" style="margin:0" placeholder="API Key">
@@ -102,7 +102,7 @@
 
             <div style="text-align:center; margin-top:20px;">
                 <button class="btn-danger sidebar-btn" onclick="forceMigrate()" style="justify-content:center;">
-                    <i data-lucide="database-backup"></i> 从旧 database.json 导入数据
+                    <i data-lucide="database-backup"></i> 从旧数据导入
                 </button>
             </div>
         </div>
@@ -114,65 +114,40 @@
     
     <div class="sidebar" id="sidebar">
         <div class="sidebar-content">
-            <!-- Search -->
             <div class="search-box">
                 <input type="text" class="search-input" id="searchInput" placeholder="搜索..." oninput="handleSearch(this.value)">
                 <i data-lucide="search" class="search-icon"></i>
             </div>
-
-            <!-- Normal Content -->
             <div id="normalSidebarList" style="display:flex; flex-direction:column; gap:24px;">
+                <div><div class="section-title">新对话</div><div class="mode-list" id="presetList"></div></div>
                 <div>
-                    <div class="section-title">新对话</div>
-                    <div class="mode-list" id="presetList"></div>
-                </div>
-                
-                <div>
-                    <div class="section-title" style="display:flex; justify-content:space-between;">
-                        <span>历史记录</span>
-                        <span id="sessionCount" style="font-weight:normal;"></span>
-                    </div>
+                    <div class="section-title" style="display:flex; justify-content:space-between;"><span>历史记录</span><span id="sessionCount" style="font-weight:normal;"></span></div>
                     <div id="sessionListContainer"></div>
                 </div>
             </div>
-
-            <!-- Search Results -->
             <div id="searchResultList" style="display:none;">
                 <div class="section-title">搜索结果</div>
                 <div id="searchOutput" style="display:flex; flex-direction:column; gap:4px;"></div>
             </div>
         </div>
-        
         <div class="sidebar-footer">
-            <button class="sidebar-btn btn-ghost" onclick="checkAnnouncement(true)">
-                <i data-lucide="bell"></i> 查看公告
-            </button>
-            <button id="adminBtn" onclick="openAdmin()" class="sidebar-btn btn-ghost" style="display:none;">
-                <i data-lucide="settings"></i> 设置
-            </button>
-            <button onclick="logout()" class="sidebar-btn btn-danger">
-                <i data-lucide="log-out"></i> 退出登录
-            </button>
+            <button class="sidebar-btn btn-ghost" onclick="checkAnnouncement(true)"><i data-lucide="bell"></i> 查看公告</button>
+            <button id="adminBtn" onclick="openAdmin()" class="sidebar-btn btn-ghost" style="display:none;"><i data-lucide="settings"></i> 设置</button>
+            <button onclick="logout()" class="sidebar-btn btn-danger"><i data-lucide="log-out"></i> 退出登录</button>
         </div>
     </div>
 
     <div class="main-chat">
         <header class="chat-header">
             <div style="display:flex; align-items:center; gap:12px;">
-                <button class="icon-btn" onclick="toggleSidebar()" style="color:var(--text-color);">
-                    <i data-lucide="menu"></i>
-                </button>
-                <div>
-                    <div style="font-weight:600; font-size:16px; display:flex; align-items:center; color:var(--text-color);">
-                        <span style="width:8px; height:8px; background:#10b981; border-radius:50%; margin-right:8px; display:inline-block;"></span>
-                        <span id="headerTitle">AI Chat</span>
-                    </div>
+                <button class="icon-btn" onclick="toggleSidebar()" style="color:var(--text-color);"><i data-lucide="menu"></i></button>
+                <div style="font-weight:600; font-size:16px; display:flex; align-items:center; color:var(--text-color);">
+                    <span style="width:8px; height:8px; background:#10b981; border-radius:50%; margin-right:8px; display:inline-block;"></span>
+                    <span id="headerTitle">AI Chat</span>
                 </div>
             </div>
             <div style="display:flex; gap:4px;">
-                <button class="icon-btn" onclick="toggleTheme()" title="切换主题">
-                    <i data-lucide="moon" id="themeIcon"></i>
-                </button>
+                <button class="icon-btn" onclick="toggleTheme()"><i data-lucide="moon" id="themeIcon"></i></button>
             </div>
         </header>
         
@@ -182,9 +157,15 @@
             <div id="preview-area"></div>
             <div class="input-box">
                 <input type="file" id="fileInput" accept="image/*,.json,.txt,.js,.md,.csv,.py" multiple style="display:none;" onchange="handleFileSelect(this)">
+                
                 <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="上传文件" style="align-self:flex-end; margin-bottom:2px;">
                     <i data-lucide="paperclip"></i>
                 </button>
+                <!-- 新增：搜索开关 -->
+                <button class="icon-btn" id="searchToggleBtn" onclick="toggleSearch()" title="开启联网搜索" style="align-self:flex-end; margin-bottom:2px;">
+                    <i data-lucide="globe"></i>
+                </button>
+
                 <textarea id="userInput" placeholder="输入消息..." rows="1" oninput="autoResize(this)"></textarea>
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()">
                     <i data-lucide="arrow-up"></i>
@@ -193,7 +174,6 @@
         </div>
     </div>
 </div>
-
 <script src="app.js"></script>
 </body>
 </html>
