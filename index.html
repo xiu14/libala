@@ -21,7 +21,6 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            /* 确保覆盖 style.css 的默认样式 */
             position: fixed;
             top: 0;
             left: 0;
@@ -30,14 +29,13 @@
             z-index: 9999;
         }
 
-        /* 图片 Logo 样式 */
         .login-logo {
             width: 140px;
             height: 140px;
             border-radius: 50%;
-            object-fit: cover; /* 保持图片比例不被拉伸 */
+            object-fit: cover;
             margin-bottom: 20px;
-            box-shadow: 0 0 25px rgba(156, 116, 255, 0.4); /* 添加一点紫色光晕呼应主题 */
+            box-shadow: 0 0 25px rgba(156, 116, 255, 0.4);
             border: 2px solid rgba(156, 116, 255, 0.2);
             animation: float 6s ease-in-out infinite;
         }
@@ -64,11 +62,10 @@
             line-height: 1.5;
         }
 
-        /* 覆盖原本的 login-box 样式 */
         #login-screen .login-box {
             padding: 30px;
-            width: 85%; /* 移动端适配：使用百分比 */
-            max-width: 340px; /* 限制最大宽度 */
+            width: 85%;
+            max-width: 340px;
             background: rgba(255,255,255,0.05) !important;
             backdrop-filter: blur(10px);
             border-radius: 12px;
@@ -77,7 +74,6 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
         }
 
-        /* 左侧亮线装饰 */
         #login-screen .login-box::before {
             content: "";
             position: absolute;
@@ -90,18 +86,17 @@
             border-radius: 2px;
         }
 
-        /* 输入框样式覆盖 */
         #login-screen .login-input {
             width: 100%;
-            padding: 14px; /* 增大触控区域 */
+            padding: 14px;
             margin: 0 0 16px 0;
             border: none !important;
             border-radius: 8px;
             background: rgba(255,255,255,0.12) !important;
             color: #fff !important;
             outline: none;
-            font-size: 16px; /* 防止iOS输入时自动放大 */
-            box-sizing: border-box; /* 确保padding不撑大宽度 */
+            font-size: 16px;
+            box-sizing: border-box;
             transition: all 0.3s ease;
         }
         
@@ -109,7 +104,6 @@
             color: rgba(255,255,255,0.5);
         }
 
-        /* 按钮样式覆盖 */
         #login-screen .login-btn {
             width: 100%;
             padding: 14px;
@@ -134,7 +128,6 @@
             transform: scale(0.98);
         }
 
-        /* 注册模式切换链接样式 */
         .switch-mode-text {
             margin-top: 20px;
             font-size: 14px;
@@ -149,46 +142,32 @@
             text-shadow: 0 0 10px rgba(156, 116, 255, 0.6);
         }
 
-        /* 简单的淡入淡出动画类 */
-        .fade-in {
-            animation: fadeIn 0.4s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(5px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* 针对超小屏幕手机的微调 */
-        @media (max-height: 600px) {
-            .login-logo { width: 100px; height: 100px; margin-bottom: 10px; }
-            .login-subtitle { margin-bottom: 15px; }
-        }
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @media (max-height: 600px) { .login-logo { width: 100px; height: 100px; margin-bottom: 10px; } .login-subtitle { margin-bottom: 15px; } }
     </style>
 </head>
 <body>
 
 <div id="login-screen">
-    <!-- 请确保将你的图片重命名为 logo.png 并放在同一目录下，或者修改下方的 src -->
+    <!-- 请确保将你的图片重命名为 logo.png 并放在同一目录下 -->
     <img src="logo.png" alt="黎吧啦AI" class="login-logo">
 
     <div class="login-title-text">Welcome to 黎吧啦 AI Station</div>
     <div class="login-subtitle">左耳亮了，你的智慧信号就该上线了。</div>
 
     <div class="login-box">
-        <!-- 账号 -->
         <input type="text" id="loginUser" class="login-input" placeholder="写上你的代号，黎吧啦在听。" autocomplete="off">
-        
-        <!-- 密码 -->
         <input type="password" id="loginPass" class="login-input" placeholder="嘘，说小声点。">
         
-        <!-- 确认密码 (默认隐藏，注册时显示) -->
+        <!-- 注册专用：确认密码 -->
         <input type="password" id="loginPassConfirm" class="login-input" placeholder="再说一遍暗号。" style="display:none;">
         
-        <!-- 按钮 (onclick 改为通用处理函数) -->
+        <!-- 注册专用：邀请码 (新增) -->
+        <input type="text" id="regInviteCode" class="login-input" placeholder="输入邀请码 (必填)" style="display:none;">
+        
         <button class="login-btn" id="actionBtn" onclick="handleSubmit()">进入站点</button>
         
-        <!-- 切换登录/注册 -->
         <div class="switch-mode-text" onclick="toggleRegisterMode()">
             没有通行证？<span style="color: #9c74ff; font-weight:600;">立即注册</span>
         </div>
@@ -218,7 +197,7 @@
         </div>
         <div class="admin-body" style="flex:1; overflow-y:auto; padding:24px;">
             
-            <!-- 折叠 1: 公告管理 -->
+            <!-- 1. 公告管理 -->
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminAnnouncements();">
                     <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="megaphone"></i> 公告管理</span>
@@ -236,7 +215,32 @@
                 </div>
             </div>
 
-            <!-- 折叠 2: 数据统计 -->
+            <!-- 2. 邀请码管理 (新增) -->
+            <div class="accordion-item">
+                <div class="accordion-header" onclick="toggleAccordion(this); fetchInviteInfo();">
+                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="ticket"></i> 邀请码管理</span>
+                    <i data-lucide="chevron-down"></i>
+                </div>
+                <div class="accordion-body">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color);">
+                        <span style="font-size:14px; font-weight:500;">启用注册邀请制</span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span id="inviteStatusText" style="font-size:12px; color:var(--text-secondary);">已关闭</span>
+                            <!-- 简单的开关按钮模拟 -->
+                            <button id="inviteToggleBtn" onclick="toggleInviteSystem()" class="login-btn" style="width:auto; padding:6px 16px; font-size:12px; background:var(--text-secondary)!important;">开启</button>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom:16px; display:flex; gap:12px;">
+                        <button class="login-btn" style="flex:1;" onclick="generateInviteCode()">🎲 生成随机邀请码</button>
+                    </div>
+
+                    <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">有效邀请码列表 (点击复制)</div>
+                    <div id="inviteCodeList" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:8px;"></div>
+                </div>
+            </div>
+
+            <!-- 3. 数据统计 -->
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this)">
                     <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="bar-chart-3"></i> 调用统计</span>
@@ -247,7 +251,7 @@
                 </div>
             </div>
             
-            <!-- 折叠 3: 模型预设 -->
+            <!-- 4. 模型预设 -->
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this)">
                     <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="cpu"></i> 模型预设管理</span>
@@ -334,7 +338,6 @@
                 <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="上传文件" style="align-self:flex-end; margin-bottom:2px;">
                     <i data-lucide="paperclip"></i>
                 </button>
-                <!-- 新增：搜索开关 -->
                 <button class="icon-btn" id="searchToggleBtn" onclick="toggleSearch()" title="开启联网搜索" style="align-self:flex-end; margin-bottom:2px;">
                     <i data-lucide="globe"></i>
                 </button>
@@ -350,4 +353,5 @@
 <script src="app.js"></script>
 </body>
 </html>
+
 
