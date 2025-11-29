@@ -2,6 +2,9 @@ let PRESETS = [], currentSessionId = null, isRequesting = false, uploadedFiles =
 let authToken = localStorage.getItem('authToken'), isAdmin = localStorage.getItem('isAdmin') === 'true';
 let isSearchEnabled = false;
 
+// --- 新增：注册模式状态 ---
+let isRegisterMode = false;
+
 marked.setOptions({ highlight: (c,l) => highlight.highlight(c, {language: highlight.getLanguage(l)?l:'plaintext'}).value, breaks: true, gfm: true });
 
 window.onload = function() {
@@ -9,23 +12,146 @@ window.onload = function() {
     document.documentElement.setAttribute('data-theme', theme);
     lucide.createIcons();
     if (authToken) initApp();
-    document.getElementById('userInput').addEventListener('keydown', (e) => { if(e.key==='Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); sendMessage(); } });
+    
+    // 监听回车键：在登录框支持回车提交，在聊天框支持回车发送
+    document.getElementById('userInput').addEventListener('keydown', (e) => { 
+        if(e.key==='Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); sendMessage(); } 
+    });
+    
+    // 登录页的回车监听
+    const loginInputs = document.querySelectorAll('.login-input');
+    loginInputs.forEach(input => {
+        input.addEventListener('keydown', (e) => {
+            if(e.key === 'Enter') handleSubmit();
+        });
+    });
+
     window.addEventListener('paste', handlePaste);
 };
 
 function isTouchDevice() { return 'ontouchstart' in window || navigator.maxTouchPoints > 0; }
-async function handleLogin() {
-    try {
-        const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username:document.getElementById('loginUser').value.trim(), password:document.getElementById('loginPass').value.trim() }) });
-        const data = await res.json();
-        if (data.success) {
-            authToken = data.token; isAdmin = data.isAdmin;
-            localStorage.setItem('authToken', authToken); localStorage.setItem('isAdmin', isAdmin);
-            initApp();
-        } else alert(data.message);
-    } catch(e) { alert("网络错误"); }
+
+// --- 新增：切换 登录/注册 模式 ---
+function toggleRegisterMode() {
+    isRegisterMode = !isRegisterMode;
+    const btn = document.getElementById('actionBtn');
+    const switchText = document.querySelector('.switch-mode-text');
+    const user = document.getElementById('loginUser');
+    const pass = document.getElementById('loginPass');
+    const confirmPass = document.getElementById('loginPassConfirm');
+    
+    // 添加简单的淡入动画类（需配合 CSS）
+    btn.classList.remove('fade-in');
+    void btn.offsetWidth; // 触发重绘
+    btn.classList.add('fade-in');
+
+    if (isRegisterMode) {
+        // 切换到注册模式
+        btn.innerText = "注册账号";
+        switchText.innerHTML = '已有账号？<span style="color: #9c74ff; font-weight:600;">返回登录</span>';
+        user.placeholder = "起个响亮的名字...";
+        confirmPass.style.display = 'block'; // 显示确认密码
+        pass.value = '';
+        confirmPass.value = '';
+    } else {
+        // 切换回登录模式
+        btn.innerText = "进入站点";
+        switchText.innerHTML = '没有通行证？<span style="color: #9c74ff; font-weight:600;">立即注册</span>';
+        user.placeholder = "写上你的代号，黎吧啦在听。";
+        confirmPass.style.display = 'none'; // 隐藏确认密码
+    }
 }
+
+// --- 新增：统一提交入口 ---
+async function handleSubmit() {
+    if (isRegisterMode) {
+        await handleRegister();
+    } else {
+        await handleLogin();
+    }
+}
+
+// --- 新增：注册处理 ---
+async function handleRegister() {
+    const userVal = document.getElementById('loginUser').value.trim();
+    const passVal = document.getElementById('loginPass').value.trim();
+    const confirmVal = document.getElementById('loginPassConfirm').value.trim();
+
+    if (!userVal || !passVal) return alert("代号和暗号都不能少。");
+    if (passVal !== confirmVal) return alert("两次输入的暗号不一致，请重试。");
+
+    try {
+        const btn = document.getElementById('actionBtn');
+        const originalText = btn.innerText;
+        btn.innerText = "注册中...";
+        btn.disabled = true;
+
+        const res = await fetch('/api/register', { 
+            method: 'POST', 
+            headers: {'Content-Type':'application/json'}, 
+            body: JSON.stringify({ username: userVal, password: passVal }) 
+        });
+        const data = await res.json();
+        
+        btn.innerText = originalText;
+        btn.disabled = false;
+
+        if (data.success) {
+            alert(data.message); // "注册成功，请登录"
+            // 自动切回登录模式，并填好用户名
+            toggleRegisterMode();
+            document.getElementById('loginUser').value = userVal;
+            document.getElementById('loginPass').value = '';
+            document.getElementById('loginPass').focus();
+        } else {
+            alert(data.message);
+        }
+    } catch(e) { 
+        alert("信号中断，无法连接注册中心。"); 
+        document.getElementById('actionBtn').disabled = false;
+    }
+}
+
+// --- 修改：登录处理 (适配 API 变更) ---
+async function handleLogin() {
+    const userVal = document.getElementById('loginUser').value.trim();
+    const passVal = document.getElementById('loginPass').value.trim();
+
+    if (!userVal || !passVal) return alert("请输入账号和密码");
+
+    try {
+        const btn = document.getElementById('actionBtn');
+        const originalText = btn.innerText;
+        btn.innerText = "验证中...";
+        btn.disabled = true;
+
+        const res = await fetch('/api/login', { 
+            method: 'POST', 
+            headers: {'Content-Type':'application/json'}, 
+            body: JSON.stringify({ username: userVal, password: passVal }) 
+        });
+        const data = await res.json();
+        
+        btn.innerText = originalText;
+        btn.disabled = false;
+
+        if (data.success) {
+            authToken = data.token; 
+            isAdmin = data.isAdmin;
+            localStorage.setItem('authToken', authToken); 
+            localStorage.setItem('isAdmin', isAdmin);
+            initApp();
+        } else {
+            alert(data.message || "账号或密码错误");
+        }
+    } catch(e) { 
+        alert("网络错误，请检查连接"); 
+        document.getElementById('actionBtn').disabled = false;
+    }
+}
+
 function logout() { localStorage.removeItem('authToken'); localStorage.removeItem('isAdmin'); location.reload(); }
+
 async function initApp() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
@@ -274,7 +400,6 @@ async function openAdmin() {
             let t = 0, list = '';
             for (const [mid, c] of Object.entries(map)) { 
                 t+=c; 
-                // --- 修复：根据ID查找名称 ---
                 const preset = data.presets.find(p => p.id === mid);
                 const name = preset ? `${preset.icon||''} ${preset.name}` : mid;
                 list+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${name}</span><strong>${c}</strong></div>`; 
