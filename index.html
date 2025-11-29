@@ -102,6 +102,7 @@
             outline: none;
             font-size: 16px; /* 防止iOS输入时自动放大 */
             box-sizing: border-box; /* 确保padding不撑大宽度 */
+            transition: all 0.3s ease;
         }
         
         #login-screen .login-input::placeholder {
@@ -133,6 +134,31 @@
             transform: scale(0.98);
         }
 
+        /* 注册模式切换链接样式 */
+        .switch-mode-text {
+            margin-top: 20px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .switch-mode-text:hover {
+            color: #fff;
+            text-shadow: 0 0 10px rgba(156, 116, 255, 0.6);
+        }
+
+        /* 简单的淡入淡出动画类 */
+        .fade-in {
+            animation: fadeIn 0.4s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         /* 针对超小屏幕手机的微调 */
         @media (max-height: 600px) {
             .login-logo { width: 100px; height: 100px; margin-bottom: 10px; }
@@ -150,14 +176,22 @@
     <div class="login-subtitle">左耳亮了，你的智慧信号就该上线了。</div>
 
     <div class="login-box">
-        <!-- 保留了原有ID以便 app.js 识别 -->
+        <!-- 账号 -->
         <input type="text" id="loginUser" class="login-input" placeholder="写上你的代号，黎吧啦在听。" autocomplete="off">
+        
+        <!-- 密码 -->
         <input type="password" id="loginPass" class="login-input" placeholder="嘘，说小声点。">
         
-        <!-- 保留原有 onclick 事件 -->
-        <button class="login-btn" onclick="handleLogin()">进入站点</button>
+        <!-- 确认密码 (默认隐藏，注册时显示) -->
+        <input type="password" id="loginPassConfirm" class="login-input" placeholder="再说一遍暗号。" style="display:none;">
         
-        <!-- 已删除底部的“忘记密码”部分 -->
+        <!-- 按钮 (onclick 改为通用处理函数) -->
+        <button class="login-btn" id="actionBtn" onclick="handleSubmit()">进入站点</button>
+        
+        <!-- 切换登录/注册 -->
+        <div class="switch-mode-text" onclick="toggleRegisterMode()">
+            没有通行证？<span style="color: #9c74ff; font-weight:600;">立即注册</span>
+        </div>
     </div>
 </div>
 
