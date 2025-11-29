@@ -2,7 +2,7 @@ let PRESETS = [], currentSessionId = null, isRequesting = false, uploadedFiles =
 let authToken = localStorage.getItem('authToken'), isAdmin = localStorage.getItem('isAdmin') === 'true';
 let isSearchEnabled = false;
 
-// --- 新增：注册模式状态 ---
+// 注册模式状态
 let isRegisterMode = false;
 
 marked.setOptions({ highlight: (c,l) => highlight.highlight(c, {language: highlight.getLanguage(l)?l:'plaintext'}).value, breaks: true, gfm: true });
@@ -13,12 +13,11 @@ window.onload = function() {
     lucide.createIcons();
     if (authToken) initApp();
     
-    // 监听回车键：在登录框支持回车提交，在聊天框支持回车发送
     document.getElementById('userInput').addEventListener('keydown', (e) => { 
         if(e.key==='Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); sendMessage(); } 
     });
     
-    // 登录页的回车监听
+    // 登录页回车提交
     const loginInputs = document.querySelectorAll('.login-input');
     loginInputs.forEach(input => {
         input.addEventListener('keydown', (e) => {
@@ -31,7 +30,7 @@ window.onload = function() {
 
 function isTouchDevice() { return 'ontouchstart' in window || navigator.maxTouchPoints > 0; }
 
-// --- 新增：切换 登录/注册 模式 ---
+// --- 切换 登录/注册 模式 (修改：增加邀请码输入框控制) ---
 function toggleRegisterMode() {
     isRegisterMode = !isRegisterMode;
     const btn = document.getElementById('actionBtn');
@@ -39,30 +38,32 @@ function toggleRegisterMode() {
     const user = document.getElementById('loginUser');
     const pass = document.getElementById('loginPass');
     const confirmPass = document.getElementById('loginPassConfirm');
+    const inviteInput = document.getElementById('regInviteCode'); // 新增
     
-    // 添加简单的淡入动画类（需配合 CSS）
     btn.classList.remove('fade-in');
-    void btn.offsetWidth; // 触发重绘
+    void btn.offsetWidth;
     btn.classList.add('fade-in');
 
     if (isRegisterMode) {
-        // 切换到注册模式
+        // 切换到注册
         btn.innerText = "注册账号";
         switchText.innerHTML = '已有账号？<span style="color: #9c74ff; font-weight:600;">返回登录</span>';
         user.placeholder = "起个响亮的名字...";
-        confirmPass.style.display = 'block'; // 显示确认密码
+        confirmPass.style.display = 'block';
+        inviteInput.style.display = 'block'; // 显示邀请码框
         pass.value = '';
         confirmPass.value = '';
+        inviteInput.value = '';
     } else {
-        // 切换回登录模式
+        // 切换回登录
         btn.innerText = "进入站点";
         switchText.innerHTML = '没有通行证？<span style="color: #9c74ff; font-weight:600;">立即注册</span>';
         user.placeholder = "写上你的代号，黎吧啦在听。";
-        confirmPass.style.display = 'none'; // 隐藏确认密码
+        confirmPass.style.display = 'none';
+        inviteInput.style.display = 'none'; // 隐藏邀请码框
     }
 }
 
-// --- 新增：统一提交入口 ---
 async function handleSubmit() {
     if (isRegisterMode) {
         await handleRegister();
@@ -71,14 +72,15 @@ async function handleSubmit() {
     }
 }
 
-// --- 新增：注册处理 ---
+// --- 注册处理 (修改：发送邀请码) ---
 async function handleRegister() {
     const userVal = document.getElementById('loginUser').value.trim();
     const passVal = document.getElementById('loginPass').value.trim();
     const confirmVal = document.getElementById('loginPassConfirm').value.trim();
+    const inviteVal = document.getElementById('regInviteCode').value.trim(); // 获取邀请码
 
     if (!userVal || !passVal) return alert("代号和暗号都不能少。");
-    if (passVal !== confirmVal) return alert("两次输入的暗号不一致，请重试。");
+    if (passVal !== confirmVal) return alert("两次输入的暗号不一致。");
 
     try {
         const btn = document.getElementById('actionBtn');
@@ -89,7 +91,8 @@ async function handleRegister() {
         const res = await fetch('/api/register', { 
             method: 'POST', 
             headers: {'Content-Type':'application/json'}, 
-            body: JSON.stringify({ username: userVal, password: passVal }) 
+            // 包含 inviteCode
+            body: JSON.stringify({ username: userVal, password: passVal, inviteCode: inviteVal }) 
         });
         const data = await res.json();
         
@@ -97,8 +100,7 @@ async function handleRegister() {
         btn.disabled = false;
 
         if (data.success) {
-            alert(data.message); // "注册成功，请登录"
-            // 自动切回登录模式，并填好用户名
+            alert(data.message);
             toggleRegisterMode();
             document.getElementById('loginUser').value = userVal;
             document.getElementById('loginPass').value = '';
@@ -112,7 +114,6 @@ async function handleRegister() {
     }
 }
 
-// --- 修改：登录处理 (适配 API 变更) ---
 async function handleLogin() {
     const userVal = document.getElementById('loginUser').value.trim();
     const passVal = document.getElementById('loginPass').value.trim();
@@ -160,6 +161,72 @@ async function initApp() {
     lucide.createIcons();
     checkAnnouncement(false); 
 }
+
+// --- 管理后台：邀请码逻辑 (新增) ---
+
+// 1. 获取邀请码信息
+async function fetchInviteInfo() {
+    try {
+        const res = await fetch('/api/admin/invite/info', { headers: { 'Authorization': `Bearer ${authToken}` } });
+        const data = await res.json();
+        if (data.success) {
+            // 更新开关状态显示
+            const statusText = document.getElementById('inviteStatusText');
+            const toggleBtn = document.getElementById('inviteToggleBtn');
+            
+            if (data.inviteRequired) {
+                statusText.innerText = '已开启';
+                statusText.style.color = '#10b981'; // Green
+                toggleBtn.innerText = '关闭';
+                toggleBtn.style.background = 'var(--danger-color)';
+            } else {
+                statusText.innerText = '已关闭';
+                statusText.style.color = 'var(--text-secondary)';
+                toggleBtn.innerText = '开启';
+                toggleBtn.style.background = 'var(--text-secondary)';
+            }
+
+            // 更新列表
+            const listDiv = document.getElementById('inviteCodeList');
+            if (data.codes.length === 0) {
+                listDiv.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:10px; opacity:0.5;">暂无可用邀请码</div>';
+            } else {
+                listDiv.innerHTML = data.codes.map(code => 
+                    `<div onclick="copyText('${code}')" style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; padding:8px; text-align:center; cursor:pointer; font-family:monospace; letter-spacing:1px; position:relative;" title="点击复制">
+                        ${code}
+                     </div>`
+                ).join('');
+            }
+        }
+    } catch(e) { console.error(e); }
+}
+
+// 2. 切换邀请制开关
+async function toggleInviteSystem() {
+    try {
+        const res = await fetch('/api/admin/invite/toggle', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } });
+        const data = await res.json();
+        if (data.success) fetchInviteInfo(); // 刷新 UI
+    } catch(e) { alert("操作失败"); }
+}
+
+// 3. 生成邀请码
+async function generateInviteCode() {
+    try {
+        const res = await fetch('/api/admin/invite/generate', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } });
+        const data = await res.json();
+        if (data.success) fetchInviteInfo(); // 刷新列表
+    } catch(e) { alert("生成失败"); }
+}
+
+// 辅助：复制文本
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        alert("邀请码已复制: " + text);
+    });
+}
+
+// --- 原有逻辑保持不变 ---
 
 function toggleSearch() {
     isSearchEnabled = !isSearchEnabled;
@@ -417,7 +484,7 @@ function editPreset(jsonStr) {
     const p = JSON.parse(jsonStr);
     document.getElementById('addId').value=p.id; document.getElementById('addName').value=p.name; document.getElementById('addDesc').value=p.desc; document.getElementById('addUrl').value=p.url; document.getElementById('addKey').value=p.key; document.getElementById('addModelId').value=p.modelId;
     document.getElementById('addFormTitle').innerText="编辑预设"; document.getElementById('savePresetBtn').innerText="保存";
-    document.querySelectorAll('.accordion-item')[2].classList.add('active');
+    document.querySelectorAll('.accordion-item')[3].classList.add('active'); // 调整索引
 }
 function resetPresetForm() {
     document.getElementById('addId').value=''; document.querySelectorAll('#adminModal input[type="text"]').forEach(i=>i.value='');
