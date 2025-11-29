@@ -30,7 +30,7 @@ window.onload = function() {
 
 function isTouchDevice() { return 'ontouchstart' in window || navigator.maxTouchPoints > 0; }
 
-// --- 切换 登录/注册 模式 (保留登录页台词) ---
+// --- 切换 登录/注册 模式 ---
 function toggleRegisterMode() {
     isRegisterMode = !isRegisterMode;
     const btn = document.getElementById('actionBtn');
@@ -45,20 +45,18 @@ function toggleRegisterMode() {
     btn.classList.add('fade-in');
 
     if (isRegisterMode) {
-        // 切换到注册
         btn.innerText = "注册账号";
         switchText.innerHTML = '已有账号？<span style="color: #9c74ff; font-weight:600;">返回登录</span>';
-        user.placeholder = "起个响亮的名字..."; // 台词：写上你的代号，黎吧啦在听。
+        user.placeholder = "起个响亮的名字...";
         confirmPass.style.display = 'block';
         inviteInput.style.display = 'block'; 
         pass.value = '';
         confirmPass.value = '';
         inviteInput.value = '';
     } else {
-        // 切换回登录
         btn.innerText = "进入站点";
         switchText.innerHTML = '没有通行证？<span style="color: #9c74ff; font-weight:600;">立即注册</span>';
-        user.placeholder = "写上你的代号，黎吧啦在听。"; // 台词：写上你的代号，黎吧啦在听。
+        user.placeholder = "写上你的代号，黎吧啦在听。";
         confirmPass.style.display = 'none';
         inviteInput.style.display = 'none'; 
     }
@@ -162,7 +160,6 @@ async function initApp() {
 }
 
 // --- 公告系统逻辑 ---
-
 let currentAnnounceTime = 0;
 
 function switchAnnounceTab(tab) {
@@ -294,174 +291,25 @@ async function generateInviteCode() {
 }
 function copyText(text) { navigator.clipboard.writeText(text).then(() => { alert("邀请码已复制: " + text); }); }
 
-// --- 其他原有逻辑 ---
-
-function toggleAccordion(header) { header.parentElement.classList.toggle('active'); }
-let searchTimeout;
-async function handleSearch(query) {
-    clearTimeout(searchTimeout);
-    if (!query.trim()) { document.getElementById('normalSidebarList').style.display = 'flex'; document.getElementById('searchResultList').style.display = 'none'; return; }
-    searchTimeout = setTimeout(async () => {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        const json = await res.json();
-        if (json.success) {
-            document.getElementById('normalSidebarList').style.display = 'none'; document.getElementById('searchResultList').style.display = 'block';
-            document.getElementById('searchOutput').innerHTML = json.data.map(item => 
-                `<div class="session-item" onclick="loadSession('${item.session_id}')"><div><div style="font-weight:600;">${item.session_title}</div><div style="font-size:12px; color:var(--text-secondary);">${item.content.substring(0,30)}...</div></div></div>`
-            ).join('') || '<div style="padding:10px;text-align:center;font-size:13px;">无记录</div>';
-        }
-    }, 300); 
-}
-async function fetchSessions() {
-    const res = await fetch('/api/sessions', { headers: { 'Authorization': `Bearer ${authToken}` } });
-    const json = await res.json();
-    if (json.success) {
-        const container = document.getElementById('sessionListContainer'); container.innerHTML = '';
-        document.getElementById('sessionCount').innerText = `${json.data.length}`;
-        const groups = { '今天': [], '昨天': [], '7天内': [], '更早': [] };
-        json.data.forEach(s => {
-            const d = new Date(s.updated_at), now = new Date(), diff = now - d, oneDay = 86400000;
-            let label = '更早';
-            if (d.toDateString() === now.toDateString()) label = '今天';
-            else if (diff < oneDay * 2 && d.getDate() !== now.getDate()) label = '昨天';
-            else if (diff < oneDay * 7) label = '7天内';
-            groups[label].push(s);
-        });
-        ['今天', '昨天', '7天内', '更早'].forEach(label => {
-            if (groups[label].length) {
-                container.innerHTML += `<div class="session-group"><div class="group-header">${label}</div>` + groups[label].map(s => {
-                    const p = PRESETS.find(x => x.id === s.mode);
-                    return `<div class="session-item ${s.id === currentSessionId ? 'active' : ''}" onclick="loadSession('${s.id}')"><div class="session-title"><span style="font-size:16px;">${p?p.icon:''}</span><span>${s.title}</span></div><div class="session-actions"><button class="icon-btn" onclick="renameSession('${s.id}','${s.title}');event.stopPropagation()"><i data-lucide="edit-2" style="width:14px"></i></button><button class="icon-btn" style="color:var(--danger-color)" onclick="deleteSession('${s.id}');event.stopPropagation()"><i data-lucide="trash-2" style="width:14px"></i></button></div></div>`;
-                }).join('') + `</div>`;
-            }
-        });
-        if (!currentSessionId && json.data.length) loadSession(json.data[0].id);
-        lucide.createIcons();
-    }
-}
-async function loadSession(id) {
-    if(isRequesting) return;
-    currentSessionId = id;
-    document.getElementById('searchInput').value = '';
-    document.getElementById('normalSidebarList').style.display = 'flex'; document.getElementById('searchResultList').style.display = 'none';
-    document.getElementById('chat-box').innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-secondary);">加载中...</div>';
-    try {
-        const res = await fetch(`/api/session/${id}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        const json = await res.json();
-        document.getElementById('headerTitle').innerText = json.session.title;
-        const box = document.getElementById('chat-box'); box.innerHTML = '';
-        if (json.messages.length === 0) 
-            box.innerHTML = '<div id="emptyState" style="text-align:center; padding:80px; color:var(--text-secondary);"><i data-lucide="message-square-plus" style="width:48px;height:48px;opacity:0.2;margin-bottom:16px;"></i><br>开始新的对话</div>';
-        json.messages.forEach(m => appendUI(null, m.role, typeof m.content==='string'?m.content:m.content.map(c=>c.type==='text'?c.text:'').join(''), m.content.filter?m.content.filter(c=>c.type==='image_url').map(c=>c.image_url.url):[], false, m.timestamp));
-        fetchSessions(); lucide.createIcons();
-        if(window.innerWidth < 1000) { document.getElementById('sidebar').classList.remove('open'); document.querySelector('.overlay').classList.remove('show'); }
-    } catch(e) { document.getElementById('chat-box').innerHTML = "加载失败"; }
-}
-async function createNewSession(pid) {
-    const res = await fetch('/api/session/new', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ presetId: pid }) });
-    const json = await res.json();
-    if (json.success) { await fetchSessions(); loadSession(json.id); }
-}
-async function renameSession(id, old) {
-    const t = prompt("新标题", old);
-    if (t && t !== old) {
-        await fetch('/api/session/rename', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id, title: t }) });
-        fetchSessions(); if(currentSessionId===id) document.getElementById('headerTitle').innerText = t;
-    }
-}
-async function deleteSession(id) {
-    if (!confirm("确定删除?")) return;
-    await fetch('/api/session/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id }) });
-    if(currentSessionId===id) { currentSessionId=null; document.getElementById('chat-box').innerHTML=''; document.getElementById('headerTitle').innerText='AI Chat'; }
-    fetchSessions();
-}
-
-async function sendMessage() {
-    if (isRequesting || !currentSessionId) return;
-    const input = document.getElementById('userInput');
-    const text = input.value.trim();
-    if (!text && uploadedFiles.length === 0) return;
-    
-    const payload = uploadedFiles.map(f => f.type.startsWith('image/') ? {type:"image_url", image_url:{url:f.data}} : {type:"text", text:`[文件 ${f.name}]:\n${f.data}\n`});
-    if (text) payload.push({ type: "text", text });
-    
-    appendUI(null, "user", text + (uploadedFiles.length?`\n(📎 ${uploadedFiles.length} 附件)`:''), uploadedFiles.filter(f=>f.type.startsWith('image/')).map(f=>f.data), false, Date.now());
-    input.value = ''; uploadedFiles = []; renderPreviews(); autoResize(input);
-    isRequesting = true; document.getElementById('sendBtn').disabled = true;
-    
-    const aiMsgId = appendUI(null, "ai", "", [], true); 
-    const aiContentDiv = document.querySelector(`#${aiMsgId} .message-content`);
-    let aiFullText = "";
-
-    try {
-        const sessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        const sessData = await sessRes.json();
-        const msgs = sessData.messages.map(m => ({ role: m.role, content: m.content }));
-        msgs.push({ role: "user", content: payload });
-
-        const res = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-            body: JSON.stringify({ sessionId: currentSessionId, presetId: sessData.session.mode, messages: msgs, useSearch: isSearchEnabled })
-        });
-        if (!res.ok) throw new Error("API Error");
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const lines = decoder.decode(value, { stream: true }).split('\n');
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const d = line.slice(6).trim();
-                    if (d === '[DONE]') continue;
-                    try { const j = JSON.parse(d); aiFullText += (j.choices?.[0]?.delta?.content || j.content || ""); } catch {}
-                }
-            }
-            aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
-            const box = document.getElementById('chat-box');
-            if(box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
-        }
-        aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
-        document.querySelector(`#${aiMsgId} .message-bubble`).insertAdjacentHTML('beforeend', `<div class="msg-meta">${formatTime(Date.now())}</div>`);
-        fetchSessions();
-    } catch (e) { aiContentDiv.innerHTML += `<br><span style="color:var(--danger-color)">Error: ${e.message}</span>`; } 
-    finally { isRequesting = false; document.getElementById('sendBtn').disabled = false; }
-}
-
-function formatTime(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
-
-function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
-    const empty = document.getElementById('emptyState');
-    if (empty) empty.remove();
-    const box = document.getElementById('chat-box');
-    const div = document.createElement('div');
-    div.className = `message-row ${role === 'user' ? 'user' : 'ai'}`;
-    div.id = id || ('msg-' + Date.now());
-    let cHtml = role==='user' ? (images.map(u=>`<img src="${u}"><br>`).join('') + text.replace(/</g, "&lt;")) : (isLoading ? '<span style="color:var(--text-secondary)">Thinking...</span>' : DOMPurify.sanitize(marked.parse(text)));
-    div.innerHTML = `<div class="avatar ${role==='user'?'user-avatar':'ai-avatar'}"><i data-lucide="${role==='user'?'user':'bot'}" style="width:18px"></i></div><div class="message-bubble"><div class="message-content">${cHtml}</div>${(timestamp&&!isLoading)?`<div class="msg-meta">${formatTime(timestamp)}</div>`:''}</div>`;
-    box.appendChild(div); box.scrollTop = box.scrollHeight; lucide.createIcons({ root: div });
-    return div.id;
-}
-
-function handlePaste(e) { Array.from(e.clipboardData.items).forEach(i => { if(i.kind==='file') processFile(i.getAsFile()); }); }
-function handleFileSelect(input) { Array.from(input.files).forEach(processFile); input.value = ''; }
-function processFile(file) {
-    const r = new FileReader();
-    r.onload = e => { uploadedFiles.push({ name: file.name, type: file.type, data: e.target.result }); renderPreviews(); };
-    file.type.startsWith('image/') ? r.readAsDataURL(file) : r.readAsText(file);
-}
-function renderPreviews() {
-    const area = document.getElementById('preview-area'); area.innerHTML = '';
-    uploadedFiles.forEach((f, i) => {
-        area.innerHTML += `<div class="preview-item">${f.type.startsWith('image/')?`<img src="${f.data}">`:'<i data-lucide="file-text"></i>'}<div class="remove-file" onclick="uploadedFiles.splice(${i},1);renderPreviews()"><i data-lucide="x" style="width:14px"></i></div></div>`;
-    }); lucide.createIcons();
-}
-function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
-
+// --- 模型预设逻辑 (修改：置顶和 System Prompt 处理) ---
 async function fetchPresets() {
-    try { const res = await fetch('/api/config'); const data = await res.json(); if(data.success) { PRESETS = data.presets; renderPresetsSidebar(); } } catch(e){}
+    try { 
+        const res = await fetch('/api/config'); 
+        const data = await res.json(); 
+        if(data.success) { 
+            let presets = data.presets;
+
+            // 1. 置顶逻辑：找到 'libala_main' 并置顶
+            const libalaIndex = presets.findIndex(p => p.id === 'libala_main');
+            if (libalaIndex !== -1) {
+                const libalaPreset = presets.splice(libalaIndex, 1)[0];
+                presets.unshift(libalaPreset); // 放到数组最前面
+            }
+            
+            PRESETS = presets;
+            renderPresetsSidebar(); 
+        } 
+    } catch(e){}
 }
 function renderPresetsSidebar() {
     const list = document.getElementById('presetList'); list.innerHTML = '';
@@ -490,18 +338,42 @@ async function openAdmin() {
     });
     lucide.createIcons();
 }
+
+// 修改：填充 system_prompt
 function editPreset(jsonStr) {
     const p = JSON.parse(jsonStr);
-    document.getElementById('addId').value=p.id; document.getElementById('addName').value=p.name; document.getElementById('addDesc').value=p.desc; document.getElementById('addUrl').value=p.url; document.getElementById('addKey').value=p.key; document.getElementById('addModelId').value=p.modelId;
-    document.getElementById('addFormTitle').innerText="编辑预设"; document.getElementById('savePresetBtn').innerText="保存";
+    document.getElementById('addId').value=p.id; 
+    document.getElementById('addName').value=p.name; 
+    document.getElementById('addDesc').value=p.desc; 
+    document.getElementById('addPrompt').value=p.system_prompt || ''; // 新增
+    document.getElementById('addUrl').value=p.url; 
+    document.getElementById('addKey').value=p.key; 
+    document.getElementById('addModelId').value=p.modelId;
+    document.getElementById('addFormTitle').innerText="编辑预设"; 
+    document.getElementById('savePresetBtn').innerText="保存";
     document.querySelectorAll('.accordion-item')[3].classList.add('active'); 
 }
+
+// 修改：清空 system_prompt
 function resetPresetForm() {
-    document.getElementById('addId').value=''; document.querySelectorAll('#adminModal input[type="text"]').forEach(i=>i.value='');
-    document.getElementById('addFormTitle').innerText="添加新预设"; document.getElementById('savePresetBtn').innerText="保存";
+    document.getElementById('addId').value=''; 
+    document.getElementById('addPrompt').value=''; // 新增
+    document.querySelectorAll('#adminModal input[type="text"]').forEach(i=>i.value='');
+    document.getElementById('addFormTitle').innerText="添加新预设"; 
+    document.getElementById('savePresetBtn').innerText="保存";
 }
+
+// 修改：保存 system_prompt
 async function savePreset() {
-    const p = { id:document.getElementById('addId').value, name:document.getElementById('addName').value, url:document.getElementById('addUrl').value, key:document.getElementById('addKey').value, modelId:document.getElementById('addModelId').value, desc:document.getElementById('addDesc').value };
+    const p = { 
+        id:document.getElementById('addId').value, 
+        name:document.getElementById('addName').value, 
+        url:document.getElementById('addUrl').value, 
+        key:document.getElementById('addKey').value, 
+        modelId:document.getElementById('addModelId').value, 
+        desc:document.getElementById('addDesc').value,
+        system_prompt: document.getElementById('addPrompt').value.trim() // 新增
+    };
     if(!p.name||!p.url||!p.key||!p.modelId) return alert("请填写完整");
     await fetch('/api/admin/preset', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify(p) });
     resetPresetForm(); openAdmin(); fetchPresets();
