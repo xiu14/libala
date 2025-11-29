@@ -34,6 +34,28 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '.')));
 
+// --- 辅助函数：获取标准北京时间字符串 ---
+function getBeijingTime() {
+    const now = new Date();
+    // 计算 UTC+8 偏移
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const bjMs = utc + (3600000 * 8);
+    const date = new Date(bjMs);
+    
+    const pad = (n) => String(n).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    const mm = pad(date.getMonth() + 1);
+    const dd = pad(date.getDate());
+    const hh = pad(date.getHours());
+    const min = pad(date.getMinutes());
+    const weekday = ['日', '一', '二', '三', '四', '五', '六'][date.getDay()];
+    
+    return {
+        full: `${yyyy}-${mm}-${dd} ${hh}:${min}`, // 2025-11-29 21:42
+        desc: `${yyyy}年${mm}月${dd}日 ${hh}:${min} 星期${weekday}` // 用于喂给 AI
+    };
+}
+
 // --- SQLite ---
 let db;
 function initDB() {
@@ -229,15 +251,9 @@ app.post('/api/admin/announcement', async (req, res) => {
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
     let { content } = req.body;
     
-    // --- 修复：强制计算北京时间 (UTC+8) ---
-    const now = new Date();
-    // 将当前UTC时间戳 + 8小时毫秒数
-    const offset = 8;
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const bjDate = new Date(utc + (3600000 * offset));
-    
-    const timeStr = `${bjDate.getFullYear()}-${String(bjDate.getMonth()+1).padStart(2,'0')}-${String(bjDate.getDate()).padStart(2,'0')} ${String(bjDate.getHours()).padStart(2,'0')}:${String(bjDate.getMinutes()).padStart(2,'0')}`;
-    content += `\n\n> 发布于 ${timeStr}`;
+    // 1. 强制附加北京时间
+    const bjTime = getBeijingTime();
+    content += `\n\n> 发布于 ${bjTime.full}`;
 
     await dbRun("INSERT INTO announcements (content, timestamp) VALUES (?, ?)", [content, Date.now()]);
     res.json({ success: true });
@@ -269,11 +285,28 @@ app.post('/api/chat', async (req, res) => {
         }
 
         let finalMsgs = [...messages];
+
+        // 2. 强制注入当前北京时间 (无论是否搜索，AI都需要知道时间)
+        const bjTime = getBeijingTime();
+        const timeContext = {
+            role: 'system',
+            content: `当前北京时间: ${bjTime.desc}。`
+        };
+        
+        // 将时间提示放在最前面
+        finalMsgs.unshift(timeContext);
+
         if (useSearch && lastMsg && lastMsg.role === 'user') {
             let q = typeof lastMsg.content === 'string' ? lastMsg.content : lastMsg.content.find(c=>c.type==='text')?.text;
             if (q) {
                 const sRes = await searchGoogle(q);
-                if (sRes) finalMsgs.splice(finalMsgs.length-1, 0, { role: 'system', content: `联网搜索结果：\n${sRes}\n请参考上述结果回答。` });
+                if (sRes) {
+                    // 插入搜索结果
+                    finalMsgs.splice(finalMsgs.length-1, 0, { 
+                        role: 'system', 
+                        content: `[联网搜索结果]:\n${sRes}\n请结合上述搜索结果回答用户问题。` 
+                    });
+                }
             }
         }
 
