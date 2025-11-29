@@ -30,7 +30,7 @@ window.onload = function() {
 
 function isTouchDevice() { return 'ontouchstart' in window || navigator.maxTouchPoints > 0; }
 
-// --- 切换 登录/注册 模式 ---
+// --- 切换 登录/注册 模式 (保留登录页台词) ---
 function toggleRegisterMode() {
     isRegisterMode = !isRegisterMode;
     const btn = document.getElementById('actionBtn');
@@ -45,18 +45,20 @@ function toggleRegisterMode() {
     btn.classList.add('fade-in');
 
     if (isRegisterMode) {
+        // 切换到注册
         btn.innerText = "注册账号";
         switchText.innerHTML = '已有账号？<span style="color: #9c74ff; font-weight:600;">返回登录</span>';
-        user.placeholder = "起个响亮的名字...";
+        user.placeholder = "起个响亮的名字..."; // 台词：写上你的代号，黎吧啦在听。
         confirmPass.style.display = 'block';
         inviteInput.style.display = 'block'; 
         pass.value = '';
         confirmPass.value = '';
         inviteInput.value = '';
     } else {
+        // 切换回登录
         btn.innerText = "进入站点";
         switchText.innerHTML = '没有通行证？<span style="color: #9c74ff; font-weight:600;">立即注册</span>';
-        user.placeholder = "写上你的代号，黎吧啦在听。";
+        user.placeholder = "写上你的代号，黎吧啦在听。"; // 台词：写上你的代号，黎吧啦在听。
         confirmPass.style.display = 'none';
         inviteInput.style.display = 'none'; 
     }
@@ -159,31 +161,24 @@ async function initApp() {
     checkAnnouncement(false); 
 }
 
-// --- 公告系统逻辑 (修改与新增) ---
+// --- 公告系统逻辑 ---
 
 let currentAnnounceTime = 0;
 
-// 1. 切换公告 Tab (最新/历史)
 function switchAnnounceTab(tab) {
-    // UI 样式切换
     document.querySelectorAll('.announce-tab').forEach(t => t.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
 
-    // 内容显示切换
     document.getElementById('view-latest').style.display = tab === 'latest' ? 'block' : 'none';
     document.getElementById('view-history').style.display = tab === 'history' ? 'block' : 'none';
 
-    // 如果是切换到历史记录，则获取数据
     if (tab === 'history') {
         fetchHistoryAnnouncements();
     }
 }
 
-// 2. 获取所有历史公告
 async function fetchHistoryAnnouncements() {
     const container = document.getElementById('announceHistoryList');
-    // 如果已经有内容，就不重复加载了(为了体验流畅)，除非这里想做强制刷新
-    // 这里为了简单，每次点击 Tab 都刷新一下状态，确保看到最新的
     container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">加载中...</div>';
 
     try {
@@ -193,7 +188,6 @@ async function fetchHistoryAnnouncements() {
         if (json.success && json.data && json.data.length > 0) {
             container.innerHTML = json.data.map(item => {
                 const dateStr = new Date(item.timestamp).toLocaleString();
-                // 渲染 Markdown
                 const htmlContent = DOMPurify.sanitize(marked.parse(item.content));
                 return `
                     <div style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; padding:16px; font-size:14px;">
@@ -213,25 +207,21 @@ async function fetchHistoryAnnouncements() {
     }
 }
 
-// 3. 检查最新公告 (页面加载时调用)
 async function checkAnnouncement(force) {
-    // 每次打开弹窗，默认切回“最新”Tab
     switchAnnounceTab('latest');
 
     try {
         const res = await fetch('/api/announcement', { headers: { 'Authorization': `Bearer ${authToken}` } });
         const json = await res.json();
-        const contentDiv = document.getElementById('view-latest'); // 对应 index.html 新的 ID
+        const contentDiv = document.getElementById('view-latest'); 
 
         if (json.success && json.data) {
             const { content, timestamp } = json.data;
             currentAnnounceTime = timestamp;
             const last = localStorage.getItem('lastReadAnnounce');
             
-            // 渲染最新内容
             contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(content));
 
-            // 如果是强制查看，或者有新公告，则显示弹窗
             if (force || (!last || parseInt(last) < timestamp)) {
                 document.getElementById('announceModal').classList.add('open');
             }
@@ -247,7 +237,6 @@ function closeAnnouncement() {
     if (currentAnnounceTime > 0) localStorage.setItem('lastReadAnnounce', currentAnnounceTime);
 }
 
-// --- 管理后台：公告发布 ---
 async function postAnnouncement() {
     const content = document.getElementById('announceInput').value;
     if (!content.trim()) return alert("内容不能为空");
