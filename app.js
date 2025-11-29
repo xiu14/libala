@@ -1,6 +1,6 @@
 let PRESETS = [], currentSessionId = null, isRequesting = false, uploadedFiles = [];
 let authToken = localStorage.getItem('authToken'), isAdmin = localStorage.getItem('isAdmin') === 'true';
-let isSearchEnabled = false; // 搜索状态
+let isSearchEnabled = false;
 
 marked.setOptions({ highlight: (c,l) => highlight.highlight(c, {language: highlight.getLanguage(l)?l:'plaintext'}).value, breaks: true, gfm: true });
 
@@ -35,7 +35,6 @@ async function initApp() {
     checkAnnouncement(false); 
 }
 
-// --- 搜索功能 ---
 function toggleSearch() {
     isSearchEnabled = !isSearchEnabled;
     const btn = document.getElementById('searchToggleBtn');
@@ -46,7 +45,6 @@ function toggleSearch() {
     }
 }
 
-// --- 公告系统 ---
 let currentAnnounceTime = 0;
 async function checkAnnouncement(force) {
     try {
@@ -95,7 +93,6 @@ async function deleteAnnouncement(id) {
     fetchAdminAnnouncements();
 }
 
-// --- 核心逻辑 ---
 function toggleAccordion(header) { header.parentElement.classList.toggle('active'); }
 let searchTimeout;
 async function handleSearch(query) {
@@ -176,7 +173,6 @@ async function deleteSession(id) {
     fetchSessions();
 }
 
-// --- 聊天发送 ---
 async function sendMessage() {
     if (isRequesting || !currentSessionId) return;
     const input = document.getElementById('userInput');
@@ -234,10 +230,8 @@ async function sendMessage() {
 function formatTime(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
 
 function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
-    // --- 关键修复：移除空状态 ---
     const empty = document.getElementById('emptyState');
     if (empty) empty.remove();
-
     const box = document.getElementById('chat-box');
     const div = document.createElement('div');
     div.className = `message-row ${role === 'user' ? 'user' : 'ai'}`;
@@ -263,7 +257,6 @@ function renderPreviews() {
 }
 function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
 
-// --- Admin ---
 async function fetchPresets() {
     try { const res = await fetch('/api/config'); const data = await res.json(); if(data.success) { PRESETS = data.presets; renderPresetsSidebar(); } } catch(e){}
 }
@@ -279,7 +272,13 @@ async function openAdmin() {
     if (data.usage) {
         for (const [u, map] of Object.entries(data.usage)) {
             let t = 0, list = '';
-            for (const [m, c] of Object.entries(map)) { t+=c; list+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${m}</span><strong>${c}</strong></div>`; }
+            for (const [mid, c] of Object.entries(map)) { 
+                t+=c; 
+                // --- 修复：根据ID查找名称 ---
+                const preset = data.presets.find(p => p.id === mid);
+                const name = preset ? `${preset.icon||''} ${preset.name}` : mid;
+                list+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${name}</span><strong>${c}</strong></div>`; 
+            }
             grid.innerHTML += `<div style="background:var(--bg-color);border:1px solid var(--border-color);padding:16px;border-radius:12px;"><div style="font-weight:600;margin-bottom:8px;">${u} <span style="float:right;background:var(--primary-color);color:#fff;padding:0 6px;border-radius:8px;font-size:12px;">${t}</span></div>${list}</div>`;
         }
     }
