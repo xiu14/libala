@@ -9,7 +9,7 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 
-// --- 1. 动态账号配置 ---
+// --- 1. 动态账号配置 (保留用于同步) ---
 const USERS = {};
 let userCount = 0;
 for (const key in process.env) {
@@ -70,12 +70,19 @@ function initDB() {
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
                 db.run(`CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT, timestamp INTEGER)`);
                 
+                // --- 新增：用户表 ---
+                db.run(`CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, is_admin INTEGER DEFAULT 0)`);
+                
                 db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user)`);
                 db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at)`);
                 db.run(`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)`);
             });
+            
+            // 启动时同步任务
             await checkAndMigrateData(false);
+            await syncEnvUsersToDB(); // 同步环境变量用户
             checkDefaultPresets();
+            
             resolve();
         });
     });
@@ -86,6 +93,32 @@ function dbGet(sql, params = []) { return new Promise((resolve, reject) => { db.
 function dbAll(sql, params = []) { return new Promise((resolve, reject) => { db.all(sql, params, (err, rows) => { if (err) reject(err); else resolve(rows); }); }); }
 
 // --- 辅助逻辑 ---
+// 将环境变量里的账号同步到数据库（只在启动时运行）
+function syncEnvUsersToDB() {
+    return new Promise((resolve) => {
+        const stmt = db.prepare("INSERT OR IGNORE INTO users (username, password, is_admin) VALUES (?, ?, ?)");
+        
+        // 同步普通账号 (ACC_前缀)
+        for (const user in USERS) {
+            stmt.run(user, USERS[user], 0);
+        }
+        
+        // 同步管理员权限
+        // 如果 ADMIN_USER 在 users 表中，将其设为管理员
+        if (ADMIN_USER) {
+            // 先尝试更新现有用户
+            db.run("UPDATE users SET is_admin = 1 WHERE username = ?", [ADMIN_USER], (err) => {
+               // 如果该用户不存在于数据库且存在于环境变量中，上面的 INSERT OR IGNORE 已经处理了插入
+               // 如果是纯新的管理员账号逻辑，这里保持简单即可
+            });
+        }
+        
+        stmt.finalize();
+        console.log("Environment users synced to DB.");
+        resolve();
+    });
+}
+
 async function checkAndMigrateData(force = false) {
     try {
         if (!fs.existsSync(OLD_DB_FILE)) return { success: false, message: "未找到旧文件" };
@@ -150,13 +183,48 @@ async function searchGoogle(query) {
 
 // --- API ---
 const tokenMap = new Map();
-app.post('/api/login', (req, res) => {
+
+// 新增：注册接口
+app.post('/api/register', async (req, res) => {
     const { username, password } = req.body;
-    if (USERS[username] && USERS[username] === password) {
+    
+    if (!username || !password) return res.json({ success: false, message: "账号或密码不能为空" });
+    if (username.length < 3) return res.json({ success: false, message: "账号至少需要3个字符" });
+
+    // 检查是否已存在
+    const exist = await dbGet("SELECT username FROM users WHERE username = ?", [username]);
+    if (exist) return res.json({ success: false, message: "该账号已被注册" });
+
+    try {
+        // 插入新用户 (默认非管理员)
+        await dbRun("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 0)", [username, password]);
+        res.json({ success: true, message: "注册成功，请登录" });
+    } catch (e) {
+        res.status(500).json({ success: false, message: "注册失败: " + e.message });
+    }
+});
+
+// 修改：登录接口
+app.post('/api/login', async (req, res) => {
+    const { username, password } = req.body;
+    
+    // 1. 优先查询数据库
+    const userRow = await dbGet("SELECT * FROM users WHERE username = ? AND password = ?", [username, password]);
+    
+    // 2. 兼容旧的环境变量逻辑 (作为后备，或如果同步未完成)
+    const isEnvUser = USERS[username] && USERS[username] === password;
+
+    if (userRow || isEnvUser) {
         const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
         tokenMap.set(token, username);
-        res.json({ success: true, token, isAdmin: username === ADMIN_USER });
-    } else res.status(401).json({ success: false });
+        
+        // 判断是否为管理员
+        const isAdmin = (userRow && userRow.is_admin === 1) || (username === ADMIN_USER);
+        
+        res.json({ success: true, token, isAdmin: isAdmin });
+    } else {
+        res.status(401).json({ success: false, message: "账号或密码错误" });
+    }
 });
 
 app.get('/api/config', async (req, res) => {
