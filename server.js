@@ -385,7 +385,7 @@ app.post('/api/admin/announcement/delete', async (req, res) => {
     res.json({ success: true });
 });
 
-// --- Chat (修改：处理 system_prompt 注入) ---
+// --- Chat (处理 system_prompt 注入) ---
 app.post('/api/chat', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ error: { message: "登录已过期" } });
