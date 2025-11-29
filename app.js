@@ -117,7 +117,7 @@ async function handleRegister() {
     }
 }
 
-// --- 登录处理 (修改自原始文件) ---
+// --- 登录处理 ---
 async function handleLogin() {
     const userVal = document.getElementById('loginUser').value.trim();
     const passVal = document.getElementById('loginPass').value.trim();
@@ -400,24 +400,7 @@ async function savePreset() {
     resetPresetForm(); openAdmin(); fetchPresets();
 }
 
-// --- 其他原有逻辑 ---
-
-function toggleAccordion(header) { header.parentElement.classList.toggle('active'); }
-let searchTimeout;
-async function handleSearch(query) {
-    clearTimeout(searchTimeout);
-    if (!query.trim()) { document.getElementById('normalSidebarList').style.display = 'flex'; document.getElementById('searchResultList').style.display = 'none'; return; }
-    searchTimeout = setTimeout(async () => {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        const json = await res.json();
-        if (json.success) {
-            document.getElementById('normalSidebarList').style.display = 'none'; document.getElementById('searchResultList').style.display = 'block';
-            document.getElementById('searchOutput').innerHTML = json.data.map(item => 
-                `<div class="session-item" onclick="loadSession('${item.session_id}')"><div><div style="font-weight:600;">${item.session_title}</div><div style="font-size:12px; color:var(--text-secondary);">${item.content.substring(0,30)}...</div></div></div>`
-            ).join('') || '<div style="padding:10px;text-align:center;font-size:13px;">无记录</div>';
-        }
-    }, 300); 
-}
+// --- 会话/聊天逻辑 (修复) ---
 async function fetchSessions() {
     const res = await fetch('/api/sessions', { headers: { 'Authorization': `Bearer ${authToken}` } });
     const json = await res.json();
@@ -478,7 +461,7 @@ async function renameSession(id, old) {
 async function deleteSession(id) {
     if (!confirm("确定删除?")) return;
     await fetch('/api/session/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id }) });
-    if(currentSessionId===id) { currentSessionId=null; document.getElementById('chat-box').innerHTML=''; document.getElementById('headerTitle').innerText='左耳 AI'; } // 更新HeaderTitle
+    if(currentSessionId===id) { currentSessionId=null; document.getElementById('chat-box').innerHTML=''; document.getElementById('headerTitle').innerText='左耳 AI'; } 
     fetchSessions();
 }
 
