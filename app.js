@@ -30,7 +30,7 @@ window.onload = function() {
 
 function isTouchDevice() { return 'ontouchstart' in window || navigator.maxTouchPoints > 0; }
 
-// --- 切换 登录/注册 模式 (修改：增加邀请码输入框控制) ---
+// --- 切换 登录/注册 模式 ---
 function toggleRegisterMode() {
     isRegisterMode = !isRegisterMode;
     const btn = document.getElementById('actionBtn');
@@ -38,29 +38,27 @@ function toggleRegisterMode() {
     const user = document.getElementById('loginUser');
     const pass = document.getElementById('loginPass');
     const confirmPass = document.getElementById('loginPassConfirm');
-    const inviteInput = document.getElementById('regInviteCode'); // 新增
+    const inviteInput = document.getElementById('regInviteCode'); 
     
     btn.classList.remove('fade-in');
     void btn.offsetWidth;
     btn.classList.add('fade-in');
 
     if (isRegisterMode) {
-        // 切换到注册
         btn.innerText = "注册账号";
         switchText.innerHTML = '已有账号？<span style="color: #9c74ff; font-weight:600;">返回登录</span>';
         user.placeholder = "起个响亮的名字...";
         confirmPass.style.display = 'block';
-        inviteInput.style.display = 'block'; // 显示邀请码框
+        inviteInput.style.display = 'block'; 
         pass.value = '';
         confirmPass.value = '';
         inviteInput.value = '';
     } else {
-        // 切换回登录
         btn.innerText = "进入站点";
         switchText.innerHTML = '没有通行证？<span style="color: #9c74ff; font-weight:600;">立即注册</span>';
         user.placeholder = "写上你的代号，黎吧啦在听。";
         confirmPass.style.display = 'none';
-        inviteInput.style.display = 'none'; // 隐藏邀请码框
+        inviteInput.style.display = 'none'; 
     }
 }
 
@@ -72,12 +70,12 @@ async function handleSubmit() {
     }
 }
 
-// --- 注册处理 (修改：发送邀请码) ---
+// --- 注册处理 ---
 async function handleRegister() {
     const userVal = document.getElementById('loginUser').value.trim();
     const passVal = document.getElementById('loginPass').value.trim();
     const confirmVal = document.getElementById('loginPassConfirm').value.trim();
-    const inviteVal = document.getElementById('regInviteCode').value.trim(); // 获取邀请码
+    const inviteVal = document.getElementById('regInviteCode').value.trim(); 
 
     if (!userVal || !passVal) return alert("代号和暗号都不能少。");
     if (passVal !== confirmVal) return alert("两次输入的暗号不一致。");
@@ -91,7 +89,6 @@ async function handleRegister() {
         const res = await fetch('/api/register', { 
             method: 'POST', 
             headers: {'Content-Type':'application/json'}, 
-            // 包含 inviteCode
             body: JSON.stringify({ username: userVal, password: passVal, inviteCode: inviteVal }) 
         });
         const data = await res.json();
@@ -162,102 +159,95 @@ async function initApp() {
     checkAnnouncement(false); 
 }
 
-// --- 管理后台：邀请码逻辑 (新增) ---
+// --- 公告系统逻辑 (修改与新增) ---
 
-// 1. 获取邀请码信息
-async function fetchInviteInfo() {
-    try {
-        const res = await fetch('/api/admin/invite/info', { headers: { 'Authorization': `Bearer ${authToken}` } });
-        const data = await res.json();
-        if (data.success) {
-            // 更新开关状态显示
-            const statusText = document.getElementById('inviteStatusText');
-            const toggleBtn = document.getElementById('inviteToggleBtn');
-            
-            if (data.inviteRequired) {
-                statusText.innerText = '已开启';
-                statusText.style.color = '#10b981'; // Green
-                toggleBtn.innerText = '关闭';
-                toggleBtn.style.background = 'var(--danger-color)';
-            } else {
-                statusText.innerText = '已关闭';
-                statusText.style.color = 'var(--text-secondary)';
-                toggleBtn.innerText = '开启';
-                toggleBtn.style.background = 'var(--text-secondary)';
-            }
+let currentAnnounceTime = 0;
 
-            // 更新列表
-            const listDiv = document.getElementById('inviteCodeList');
-            if (data.codes.length === 0) {
-                listDiv.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:10px; opacity:0.5;">暂无可用邀请码</div>';
-            } else {
-                listDiv.innerHTML = data.codes.map(code => 
-                    `<div onclick="copyText('${code}')" style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; padding:8px; text-align:center; cursor:pointer; font-family:monospace; letter-spacing:1px; position:relative;" title="点击复制">
-                        ${code}
-                     </div>`
-                ).join('');
-            }
-        }
-    } catch(e) { console.error(e); }
-}
+// 1. 切换公告 Tab (最新/历史)
+function switchAnnounceTab(tab) {
+    // UI 样式切换
+    document.querySelectorAll('.announce-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
 
-// 2. 切换邀请制开关
-async function toggleInviteSystem() {
-    try {
-        const res = await fetch('/api/admin/invite/toggle', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } });
-        const data = await res.json();
-        if (data.success) fetchInviteInfo(); // 刷新 UI
-    } catch(e) { alert("操作失败"); }
-}
+    // 内容显示切换
+    document.getElementById('view-latest').style.display = tab === 'latest' ? 'block' : 'none';
+    document.getElementById('view-history').style.display = tab === 'history' ? 'block' : 'none';
 
-// 3. 生成邀请码
-async function generateInviteCode() {
-    try {
-        const res = await fetch('/api/admin/invite/generate', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } });
-        const data = await res.json();
-        if (data.success) fetchInviteInfo(); // 刷新列表
-    } catch(e) { alert("生成失败"); }
-}
-
-// 辅助：复制文本
-function copyText(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        alert("邀请码已复制: " + text);
-    });
-}
-
-// --- 原有逻辑保持不变 ---
-
-function toggleSearch() {
-    isSearchEnabled = !isSearchEnabled;
-    const btn = document.getElementById('searchToggleBtn');
-    if (isSearchEnabled) {
-        btn.style.color = '#10b981'; btn.style.background = 'rgba(16, 185, 129, 0.1)';
-    } else {
-        btn.style.color = ''; btn.style.background = '';
+    // 如果是切换到历史记录，则获取数据
+    if (tab === 'history') {
+        fetchHistoryAnnouncements();
     }
 }
 
-let currentAnnounceTime = 0;
+// 2. 获取所有历史公告
+async function fetchHistoryAnnouncements() {
+    const container = document.getElementById('announceHistoryList');
+    // 如果已经有内容，就不重复加载了(为了体验流畅)，除非这里想做强制刷新
+    // 这里为了简单，每次点击 Tab 都刷新一下状态，确保看到最新的
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">加载中...</div>';
+
+    try {
+        const res = await fetch('/api/announcements/history', { headers: { 'Authorization': `Bearer ${authToken}` } });
+        const json = await res.json();
+        
+        if (json.success && json.data && json.data.length > 0) {
+            container.innerHTML = json.data.map(item => {
+                const dateStr = new Date(item.timestamp).toLocaleString();
+                // 渲染 Markdown
+                const htmlContent = DOMPurify.sanitize(marked.parse(item.content));
+                return `
+                    <div style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; padding:16px; font-size:14px;">
+                        <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px; border-bottom:1px solid var(--border-color); padding-bottom:8px; display:flex; justify-content:space-between;">
+                            <span>${dateStr}</span>
+                            <span style="opacity:0.5">#${item.id}</span>
+                        </div>
+                        <div style="line-height:1.6; color:var(--text-color);">${htmlContent}</div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">暂无历史公告</div>';
+        }
+    } catch(e) {
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--danger-color);">加载失败</div>';
+    }
+}
+
+// 3. 检查最新公告 (页面加载时调用)
 async function checkAnnouncement(force) {
+    // 每次打开弹窗，默认切回“最新”Tab
+    switchAnnounceTab('latest');
+
     try {
         const res = await fetch('/api/announcement', { headers: { 'Authorization': `Bearer ${authToken}` } });
         const json = await res.json();
+        const contentDiv = document.getElementById('view-latest'); // 对应 index.html 新的 ID
+
         if (json.success && json.data) {
             const { content, timestamp } = json.data;
             currentAnnounceTime = timestamp;
             const last = localStorage.getItem('lastReadAnnounce');
+            
+            // 渲染最新内容
+            contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(content));
+
+            // 如果是强制查看，或者有新公告，则显示弹窗
             if (force || (!last || parseInt(last) < timestamp)) {
-                document.getElementById('announceBody').innerHTML = DOMPurify.sanitize(marked.parse(content));
                 document.getElementById('announceModal').classList.add('open');
             }
-        } else if (force) alert("暂无公告");
+        } else {
+            contentDiv.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-secondary);">暂无最新公告</div>';
+            if (force) document.getElementById('announceModal').classList.add('open');
+        }
     } catch(e) {}
 }
+
 function closeAnnouncement() {
     document.getElementById('announceModal').classList.remove('open');
     if (currentAnnounceTime > 0) localStorage.setItem('lastReadAnnounce', currentAnnounceTime);
 }
+
+// --- 管理后台：公告发布 ---
 async function postAnnouncement() {
     const content = document.getElementById('announceInput').value;
     if (!content.trim()) return alert("内容不能为空");
@@ -285,6 +275,37 @@ async function deleteAnnouncement(id) {
     await fetch('/api/admin/announcement/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id }) });
     fetchAdminAnnouncements();
 }
+
+// --- 管理后台：邀请码逻辑 ---
+async function fetchInviteInfo() {
+    try {
+        const res = await fetch('/api/admin/invite/info', { headers: { 'Authorization': `Bearer ${authToken}` } });
+        const data = await res.json();
+        if (data.success) {
+            const statusText = document.getElementById('inviteStatusText');
+            const toggleBtn = document.getElementById('inviteToggleBtn');
+            if (data.inviteRequired) {
+                statusText.innerText = '已开启'; statusText.style.color = '#10b981'; 
+                toggleBtn.innerText = '关闭'; toggleBtn.style.background = 'var(--danger-color)';
+            } else {
+                statusText.innerText = '已关闭'; statusText.style.color = 'var(--text-secondary)';
+                toggleBtn.innerText = '开启'; toggleBtn.style.background = 'var(--text-secondary)';
+            }
+            const listDiv = document.getElementById('inviteCodeList');
+            if (data.codes.length === 0) listDiv.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:10px; opacity:0.5;">暂无可用邀请码</div>';
+            else listDiv.innerHTML = data.codes.map(code => `<div onclick="copyText('${code}')" style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; padding:8px; text-align:center; cursor:pointer; font-family:monospace; letter-spacing:1px; position:relative;" title="点击复制">${code}</div>`).join('');
+        }
+    } catch(e) { console.error(e); }
+}
+async function toggleInviteSystem() {
+    try { const res = await fetch('/api/admin/invite/toggle', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); const data = await res.json(); if (data.success) fetchInviteInfo(); } catch(e) { alert("操作失败"); }
+}
+async function generateInviteCode() {
+    try { const res = await fetch('/api/admin/invite/generate', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); const data = await res.json(); if (data.success) fetchInviteInfo(); } catch(e) { alert("生成失败"); }
+}
+function copyText(text) { navigator.clipboard.writeText(text).then(() => { alert("邀请码已复制: " + text); }); }
+
+// --- 其他原有逻辑 ---
 
 function toggleAccordion(header) { header.parentElement.classList.toggle('active'); }
 let searchTimeout;
@@ -484,7 +505,7 @@ function editPreset(jsonStr) {
     const p = JSON.parse(jsonStr);
     document.getElementById('addId').value=p.id; document.getElementById('addName').value=p.name; document.getElementById('addDesc').value=p.desc; document.getElementById('addUrl').value=p.url; document.getElementById('addKey').value=p.key; document.getElementById('addModelId').value=p.modelId;
     document.getElementById('addFormTitle').innerText="编辑预设"; document.getElementById('savePresetBtn').innerText="保存";
-    document.querySelectorAll('.accordion-item')[3].classList.add('active'); // 调整索引
+    document.querySelectorAll('.accordion-item')[3].classList.add('active'); 
 }
 function resetPresetForm() {
     document.getElementById('addId').value=''; document.querySelectorAll('#adminModal input[type="text"]').forEach(i=>i.value='');
