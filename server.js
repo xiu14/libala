@@ -69,14 +69,9 @@ function initDB() {
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
                 db.run(`CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT, timestamp INTEGER)`);
                 db.run(`CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, is_admin INTEGER DEFAULT 0)`);
-                
-                // --- 新增：邀请码相关表 ---
-                // system_config: 存储全局配置，如 invite_required
                 db.run(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT)`);
-                // invites: 存储邀请码
                 db.run(`CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, created_at INTEGER, used_by TEXT, used_at INTEGER)`);
                 
-                // 初始化默认配置 (默认关闭邀请制)
                 db.run(`INSERT OR IGNORE INTO system_config (key, value) VALUES ('invite_required', 'false')`);
 
                 db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user)`);
@@ -173,52 +168,39 @@ async function searchGoogle(query) {
 // --- API ---
 const tokenMap = new Map();
 
-// 获取当前系统状态 (是否需要邀请码) - 公开接口
 app.get('/api/system/status', async (req, res) => {
     const config = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
     const inviteRequired = config ? config.value === 'true' : false;
     res.json({ success: true, inviteRequired });
 });
 
-// 修改：注册接口 (集成邀请码逻辑)
 app.post('/api/register', async (req, res) => {
     const { username, password, inviteCode } = req.body;
-    
     if (!username || !password) return res.json({ success: false, message: "账号或密码不能为空" });
     if (username.length < 3) return res.json({ success: false, message: "账号至少需要3个字符" });
 
-    // 1. 检查是否开启邀请制
     const config = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
     const isInviteRequired = config && config.value === 'true';
 
-    // 2. 如果开启，验证邀请码
     if (isInviteRequired) {
         if (!inviteCode) return res.json({ success: false, message: "本站已开启邀请注册，请输入邀请码" });
         const invite = await dbGet("SELECT * FROM invites WHERE code = ? AND used_by IS NULL", [inviteCode.trim()]);
         if (!invite) return res.json({ success: false, message: "邀请码无效或已被使用" });
     }
 
-    // 3. 检查用户是否存在
     const exist = await dbGet("SELECT username FROM users WHERE username = ?", [username]);
     if (exist) return res.json({ success: false, message: "该账号已被注册" });
 
     try {
         db.serialize(async () => {
             db.run("BEGIN TRANSACTION");
-            // 4. 创建用户
             db.run("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 0)", [username, password]);
-            
-            // 5. 如果使用了邀请码，标记为已使用
             if (isInviteRequired && inviteCode) {
                 db.run("UPDATE invites SET used_by = ?, used_at = ? WHERE code = ?", [username, Date.now(), inviteCode.trim()]);
             }
             db.run("COMMIT", (err) => {
-                if (err) {
-                    console.error(err);
-                    res.status(500).json({ success: false, message: "注册事务失败" });
-                } else {
-                    res.json({ success: true, message: "注册成功，请登录" });
-                }
+                if (err) res.status(500).json({ success: false, message: "注册事务失败" });
+                else res.json({ success: true, message: "注册成功，请登录" });
             });
         });
     } catch (e) {
@@ -242,15 +224,11 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// --- 管理员邀请码接口 ---
 app.get('/api/admin/invite/info', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-
     const config = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
     const inviteRequired = config ? config.value === 'true' : false;
-    
-    // 获取未使用的邀请码
     const codes = await dbAll("SELECT code FROM invites WHERE used_by IS NULL ORDER BY created_at DESC");
     res.json({ success: true, inviteRequired, codes: codes.map(c => c.code) });
 });
@@ -258,10 +236,8 @@ app.get('/api/admin/invite/info', async (req, res) => {
 app.post('/api/admin/invite/toggle', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-
     const current = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
     const newVal = (current && current.value === 'true') ? 'false' : 'true';
-    
     await dbRun("INSERT OR REPLACE INTO system_config (key, value) VALUES ('invite_required', ?)", [newVal]);
     res.json({ success: true, inviteRequired: newVal === 'true' });
 });
@@ -269,15 +245,11 @@ app.post('/api/admin/invite/toggle', async (req, res) => {
 app.post('/api/admin/invite/generate', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-
-    // 生成6位大写随机码
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     await dbRun("INSERT INTO invites (code, created_at) VALUES (?, ?)", [code, Date.now()]);
     res.json({ success: true, code });
 });
 
-
-// --- 其他 API (Config, Sessions, Chat 等保持不变) ---
 app.get('/api/config', async (req, res) => {
     const presets = await dbAll("SELECT id, name, desc, icon FROM presets");
     res.json({ success: true, presets });
@@ -356,6 +328,16 @@ app.get('/api/announcement', async (req, res) => {
     if (!user) return res.status(403).json({ success: false });
     const ann = await dbGet("SELECT content, timestamp FROM announcements ORDER BY id DESC LIMIT 1");
     res.json({ success: true, data: ann });
+});
+
+// 新增：所有历史公告 (面向所有用户)
+app.get('/api/announcements/history', async (req, res) => {
+    const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
+    if (!user) return res.status(403).json({ success: false });
+    
+    // 获取所有公告，按时间倒序
+    const list = await dbAll("SELECT id, content, timestamp FROM announcements ORDER BY id DESC");
+    res.json({ success: true, data: list });
 });
 
 app.get('/api/admin/announcement/list', async (req, res) => {
