@@ -25,7 +25,7 @@ const DATA_DIR = '/app/data';
 const DB_FILE = path.join(DATA_DIR, 'chat.db'); 
 const OLD_DB_FILE = path.join(DATA_DIR, 'database.json');
 
-// --- 默认预设：新增置顶的黎吧啦预设 ---
+// --- 默认预设：新增置顶的黎吧啦预设，使用 libala_main ID进行置顶 ---
 const DEFAULT_PRESETS = [
     { 
         id: 'libala_main', // 专用的ID用于前端置顶
@@ -73,11 +73,10 @@ function initDB() {
         try { if (!fs.existsSync(DATA_DIR)) await fsPromises.mkdir(DATA_DIR, { recursive: true }); } catch (e) {}
         db = new sqlite3.Database(DB_FILE, async (err) => {
             if (err) return reject(err);
-            
-            // 1. 同步创建所有表 (如果不存在，则创建包含所有字段的新表)
             db.serialize(() => {
-                // 必须在同步块中执行，以便后续异步查询依赖
+                // 预设表修改：新增 system_prompt 字段
                 db.run(`CREATE TABLE IF NOT EXISTS presets (id TEXT PRIMARY KEY, name TEXT, desc TEXT, url TEXT, key TEXT, modelId TEXT, icon TEXT, system_prompt TEXT)`);
+                
                 db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT, title TEXT, mode TEXT, created_at INTEGER, updated_at INTEGER)`);
                 db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE)`);
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
@@ -93,22 +92,6 @@ function initDB() {
                 db.run(`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)`);
             });
             
-            // 2. 异步模式迁移检查 (修复数据加载失败的根源)
-            try {
-                const info = await dbAll("PRAGMA table_info(presets)");
-                const hasSystemPrompt = info.some(col => col.name === 'system_prompt');
-                
-                // 如果表存在但缺少 system_prompt 字段，则执行 ALTER TABLE
-                if (info.length > 0 && !hasSystemPrompt) {
-                    console.log("MIGRATION: Adding system_prompt column to presets table.");
-                    await dbRun("ALTER TABLE presets ADD COLUMN system_prompt TEXT");
-                }
-            } catch (e) {
-                console.error("Schema migration failed:", e.message);
-                // 即使迁移失败，也要继续运行，以防万一
-            }
-            
-            // 3. 继续初始化流程
             await checkAndMigrateData(false);
             await syncEnvUsersToDB();
             checkDefaultPresets();
@@ -144,7 +127,7 @@ async function checkAndMigrateData(force = false) {
         db.serialize(() => {
             db.run("BEGIN TRANSACTION");
             if (oldData.presets) {
-                // 修改：插入 DEFAULT_PRESETS 时，包含 system_prompt 字段
+                // 处理旧数据迁移，新增 system_prompt 字段
                 const stmt = db.prepare("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                 oldData.presets.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon || '⚡', p.system_prompt || null));
                 stmt.finalize();
@@ -172,7 +155,7 @@ async function checkAndMigrateData(force = false) {
 async function checkDefaultPresets() {
     const c = await dbGet("SELECT count(*) as c FROM presets");
     if (c.c === 0) {
-        // 修改：插入 DEFAULT_PRESETS 时，包含 system_prompt 字段
+        // 插入 DEFAULT_PRESETS 时，包含 system_prompt
         const stmt = db.prepare("INSERT INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         DEFAULT_PRESETS.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon, p.system_prompt));
         stmt.finalize();
@@ -200,12 +183,14 @@ async function searchGoogle(query) {
 // --- API ---
 const tokenMap = new Map();
 
+// 获取系统状态 (是否需要邀请码)
 app.get('/api/system/status', async (req, res) => {
     const config = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
     const inviteRequired = config ? config.value === 'true' : false;
     res.json({ success: true, inviteRequired });
 });
 
+// 注册接口 (集成邀请码逻辑)
 app.post('/api/register', async (req, res) => {
     const { username, password, inviteCode } = req.body;
     if (!username || !password) return res.json({ success: false, message: "账号或密码不能为空" });
@@ -241,6 +226,7 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
+// 登录接口
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     const userRow = await dbGet("SELECT * FROM users WHERE username = ? AND password = ?", [username, password]);
@@ -256,6 +242,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+// 管理员邀请码接口
 app.get('/api/admin/invite/info', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
@@ -282,12 +269,14 @@ app.post('/api/admin/invite/generate', async (req, res) => {
     res.json({ success: true, code });
 });
 
+// 配置信息 (包含 system_prompt)
 app.get('/api/config', async (req, res) => {
-    // 修改：查询 presets 时包含 system_prompt 字段
+    // 查询 presets 时包含 system_prompt 字段
     const presets = await dbAll("SELECT id, name, desc, icon, system_prompt FROM presets");
     res.json({ success: true, presets });
 });
 
+// 会话列表
 app.get('/api/sessions', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
@@ -295,6 +284,7 @@ app.get('/api/sessions', async (req, res) => {
     res.json({ success: true, data: sessions });
 });
 
+// 会话详情
 app.get('/api/session/:id', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
@@ -363,6 +353,7 @@ app.get('/api/announcement', async (req, res) => {
     res.json({ success: true, data: ann });
 });
 
+// 所有历史公告 (面向所有用户)
 app.get('/api/announcements/history', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
@@ -420,16 +411,17 @@ app.post('/api/chat', async (req, res) => {
              finalMsgs.unshift({ role: 'system', content: preset.system_prompt });
         }
         
-        // 3. 注入当前北京时间 (放在 system_prompt 之后)
+        // 3. 注入当前北京时间 (放在所有消息的最前面)
         const bjTime = getBeijingTime();
         const timeContext = { role: 'system', content: `当前北京时间: ${bjTime.desc}。` };
-        finalMsgs.unshift(timeContext); // 放在所有消息的最前面
+        finalMsgs.unshift(timeContext); 
 
         if (useSearch && lastMsg && lastMsg.role === 'user') {
             let q = typeof lastMsg.content === 'string' ? lastMsg.content : lastMsg.content.find(c=>c.type==='text')?.text;
             if (q) {
                 const sRes = await searchGoogle(q);
                 if (sRes) {
+                    // 注入搜索结果到用户消息之前
                     finalMsgs.splice(finalMsgs.length-1, 0, { 
                         role: 'system', 
                         content: `[联网搜索结果]:\n${sRes}\n请结合上述搜索结果回答用户问题。` 
@@ -485,7 +477,7 @@ app.post('/api/chat', async (req, res) => {
 app.get('/api/admin/data', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-    // 修改：查询 presets 时包含 system_prompt 字段
+    // 查询 presets 时包含 system_prompt 字段
     const presets = await dbAll("SELECT * FROM presets");
     const uRows = await dbAll("SELECT * FROM usage");
     const usage = {};
@@ -496,7 +488,7 @@ app.get('/api/admin/data', async (req, res) => {
 app.post('/api/admin/preset', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-    // 修改：接收并存储 system_prompt 字段
+    // 接收并存储 system_prompt 字段
     const { id, name, url, key, modelId, desc, icon, system_prompt } = req.body;
     const fid = id || 'model_' + Date.now();
     await dbRun("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [fid, name, desc, url, key, modelId, icon||'⚡', system_prompt]);
