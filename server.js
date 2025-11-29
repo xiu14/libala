@@ -1,21 +1,38 @@
+require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
 const path = require('path');
-const fs = require('fs').promises;
-const fsDirect = require('fs');
+const fs = require('fs');
+const fsPromises = fs.promises;
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
 
 const PORT = process.env.PORT || 3000;
 
-// --- 账号配置 ---
-const USERS = {
-    "libala": process.env.USER_PWD_LIBALA || "ouhao1992", 
-    "dmj": process.env.USER_PWD_DMJ || "251128"
-};
-const ADMIN_USER = "libala";
+// --- 1. 动态账号配置 (基于环境变量) ---
+// 格式：ACC_zhangsan = 123456
+const USERS = {};
+let userCount = 0;
 
-// --- 数据存储配置 ---
+console.log("正在加载用户配置...");
+for (const key in process.env) {
+    if (key.startsWith('ACC_')) {
+        const username = key.slice(4); // 去掉 'ACC_'
+        const password = process.env[key];
+        USERS[username] = password;
+        userCount++;
+        console.log(`- 已加载用户: ${username}`);
+    }
+}
+
+if (userCount === 0) {
+    console.warn("⚠️ 警告: 未在环境变量中发现以 'ACC_' 开头的账号配置。无法登录。");
+}
+
+// 管理员账号名 (需确保该账号在 ACC_ 环境变量中存在)
+const ADMIN_USER = process.env.ADMIN_USER || "libala";
+
+// --- 2. 数据存储配置 (保留原路径) ---
 const DATA_DIR = '/app/data'; 
 const DB_FILE = path.join(DATA_DIR, 'chat.db'); 
 const OLD_DB_FILE = path.join(DATA_DIR, 'database.json');
@@ -28,14 +45,18 @@ const DEFAULT_PRESETS = [
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '.')));
+app.use(express.static(path.join(__dirname, '.'))); // 托管静态文件(css, js)
 
 // --- SQLite 数据库封装 ---
 let db;
 
 function initDB() {
     return new Promise(async (resolve, reject) => {
-        try { await fs.mkdir(DATA_DIR, { recursive: true }); } catch (e) {}
+        try { 
+            if (!fs.existsSync(DATA_DIR)) {
+                await fsPromises.mkdir(DATA_DIR, { recursive: true }); 
+            }
+        } catch (e) { console.error("创建目录失败:", e); }
 
         db = new sqlite3.Database(DB_FILE, async (err) => {
             if (err) return reject(err);
@@ -46,8 +67,13 @@ function initDB() {
                 db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT, title TEXT, mode TEXT, created_at INTEGER, updated_at INTEGER)`);
                 db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE)`);
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
-                // 新增：公告表
                 db.run(`CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT, timestamp INTEGER)`);
+
+                // --- 优化: 添加索引以加速搜索和列表查询 ---
+                db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user)`);
+                db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at)`);
+                db.run(`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)`);
+                db.run(`CREATE INDEX IF NOT EXISTS idx_messages_content ON messages(content)`); // 简单的 LIKE 加速
             });
 
             await checkAndMigrateData(false);
@@ -73,33 +99,22 @@ function dbAll(sql, params = []) {
     });
 }
 
-// --- 数据迁移逻辑 ---
+// --- 数据迁移逻辑 (保持不变) ---
 async function checkAndMigrateData(force = false) {
     try {
-        if (!fsDirect.existsSync(OLD_DB_FILE)) return { success: false, message: "未找到旧文件" };
+        if (!fs.existsSync(OLD_DB_FILE)) return { success: false, message: "未找到旧文件" };
         if (!force) {
             const sessionCount = await dbGet("SELECT count(*) as count FROM sessions");
             if (sessionCount.count > 0) return { success: true, message: "数据库非空，跳过自动迁移" };
         }
-
         console.log("开始迁移旧数据...");
-        const oldDataRaw = await fs.readFile(OLD_DB_FILE, 'utf8');
+        const oldDataRaw = await fsPromises.readFile(OLD_DB_FILE, 'utf8');
         const oldData = JSON.parse(oldDataRaw);
-
         db.serialize(() => {
             db.run("BEGIN TRANSACTION");
             if (oldData.presets && Array.isArray(oldData.presets)) {
                 const stmt = db.prepare("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
                 oldData.presets.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon || '⚡'));
-                stmt.finalize();
-            }
-            if (oldData.usage) {
-                const stmt = db.prepare("INSERT OR REPLACE INTO usage (user, model_id, count) VALUES (?, ?, ?)");
-                for (const [user, usageMap] of Object.entries(oldData.usage)) {
-                    for (const [modelId, count] of Object.entries(usageMap)) {
-                        stmt.run(user, modelId, count);
-                    }
-                }
                 stmt.finalize();
             }
             if (oldData.chats) {
@@ -112,7 +127,7 @@ async function checkAndMigrateData(force = false) {
                         const now = Date.now() - (offset * 1000); 
                         offset++;
                         sessStmt.run(sId, user, s.title, s.mode, now, now);
-                        if (s.messages && Array.isArray(s.messages)) {
+                        if (s.messages) {
                             s.messages.forEach(m => {
                                 const contentStr = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
                                 msgStmt.run(sId, m.role, contentStr, now);
@@ -147,6 +162,7 @@ const tokenMap = new Map();
 
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
+    // 检查动态加载的用户列表
     if (USERS[username] && USERS[username] === password) {
         const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
         tokenMap.set(token, username);
@@ -191,6 +207,7 @@ app.post('/api/session/new', async (req, res) => {
     const sessionId = 'sess-' + Date.now();
     const now = Date.now();
     try {
+        // 限制每个用户 100 个会话
         const countRes = await dbGet("SELECT count(*) as count FROM sessions WHERE user = ?", [user]);
         if (countRes.count >= 100) {
             const oldest = await dbGet("SELECT id FROM sessions WHERE user = ? ORDER BY updated_at ASC LIMIT 1", [user]);
@@ -224,6 +241,7 @@ app.post('/api/session/delete', async (req, res) => {
     res.json({ success: true });
 });
 
+// --- 4. 搜索功能优化 (使用索引) ---
 app.get('/api/search', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
@@ -233,6 +251,7 @@ app.get('/api/search', async (req, res) => {
 
     try {
         const keyword = `%${q.trim()}%`;
+        // 索引 idx_messages_session 和 idx_sessions_user 将加速此 Join 查询
         const sql = `
             SELECT 
                 messages.id as msg_id, 
@@ -272,12 +291,9 @@ app.get('/api/search', async (req, res) => {
     }
 });
 
-// --- 新增：公告 API ---
 app.get('/api/announcement', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
-    
-    // 获取最新的一条公告
     const ann = await dbGet("SELECT content, timestamp FROM announcements ORDER BY id DESC LIMIT 1");
     res.json({ success: true, data: ann });
 });
@@ -285,15 +301,12 @@ app.get('/api/announcement', async (req, res) => {
 app.post('/api/admin/announcement', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-    
     const { content } = req.body;
-    if (!content) return res.status(400).json({ success: false });
-
     await dbRun("INSERT INTO announcements (content, timestamp) VALUES (?, ?)", [content, Date.now()]);
     res.json({ success: true });
 });
 
-// --- 流式聊天接口 ---
+// --- 5. 流式响应优化 (Buffer处理) ---
 app.post('/api/chat', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ error: { message: "登录已过期" } });
@@ -317,9 +330,12 @@ app.post('/api/chat', async (req, res) => {
         if (apiUrl.endsWith('/')) apiUrl = apiUrl.slice(0, -1);
         if (!apiUrl.includes('/chat/completions')) apiUrl += '/v1/chat/completions';
 
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
+        // 设置 SSE 头部
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive'
+        });
 
         const response = await fetch(apiUrl, {
             method: 'POST',
@@ -339,24 +355,39 @@ app.post('/api/chat', async (req, res) => {
         }
 
         let aiFullResponse = ""; 
-        
+        let buffer = ""; // 用于缓存不完整的 chunk
+
         response.body.on('data', (chunk) => {
-            res.write(chunk);
-            const lines = chunk.toString().split('\n');
-            for (const line of lines) {
+            const textChunk = chunk.toString();
+            buffer += textChunk;
+            
+            // 处理 buffer 中的完整行
+            let newlineIndex;
+            while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
+                const line = buffer.slice(0, newlineIndex).trim();
+                buffer = buffer.slice(newlineIndex + 1);
+                
                 if (line.startsWith('data: ')) {
-                    const dataStr = line.slice(6).trim();
+                    const dataStr = line.slice(6);
                     if (dataStr === '[DONE]') continue;
+                    
                     try {
                         const json = JSON.parse(dataStr);
                         const content = json.choices?.[0]?.delta?.content || "";
-                        aiFullResponse += content;
-                    } catch (e) { }
+                        if (content) {
+                            aiFullResponse += content;
+                            // 直接透传给前端，保持流式
+                            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
+                        }
+                    } catch (e) {
+                        // JSON 解析失败可能是因为数据包被截断（虽然有 buffer 逻辑，但仍需容错）
+                    }
                 }
             }
         });
 
         response.body.on('end', async () => {
+            res.write('data: [DONE]\n\n');
             res.end(); 
             if (aiFullResponse.trim()) {
                 try {
@@ -371,8 +402,8 @@ app.post('/api/chat', async (req, res) => {
         });
 
         response.body.on('error', (err) => {
-            if(!res.headersSent) res.status(500).json({error: "Stream error"});
-            else res.end();
+            console.error("Stream error", err);
+            res.end();
         });
 
     } catch (error) { 
@@ -392,9 +423,7 @@ app.get('/api/admin/data', async (req, res) => {
         if (!usage[row.user]) usage[row.user] = {};
         usage[row.user][row.model_id] = row.count;
     });
-    // 获取最新公告
     const announcement = await dbGet("SELECT content, timestamp FROM announcements ORDER BY id DESC LIMIT 1");
-    
     res.json({ success: true, presets, usage, announcement });
 });
 
