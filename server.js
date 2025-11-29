@@ -25,9 +25,20 @@ const DATA_DIR = '/app/data';
 const DB_FILE = path.join(DATA_DIR, 'chat.db'); 
 const OLD_DB_FILE = path.join(DATA_DIR, 'database.json');
 
+// --- 默认预设：新增置顶的黎吧啦预设 ---
 const DEFAULT_PRESETS = [
-    { id: 'gemini', name: 'Gemini', desc: '3 Pro (Preview)', url: "https://whu.zeabur.app", key: "pwd", modelId: "gemini-3-pro-preview", icon: "💎" },
-    { id: 'gpt', name: 'GPT', desc: '4.1 Mini', url: "https://x666.me", key: "sk-Pgj1iaG2ZvdKOxxrVHrvTio6vtKUGVOZbUgdUdqvFxp9RQow", modelId: "gpt-4.1-mini", icon: "🤖" }
+    { 
+        id: 'libala_main', // 专用的ID用于前端置顶
+        name: '✨ 左耳 - 黎吧啦', 
+        desc: '倾听你的心声，用我的方式解析世界。', 
+        url: "https://whu.zeabur.app", // 假设使用默认的 Gemini 模型 API
+        key: "pwd", 
+        modelId: "gemini-3-pro-preview", 
+        icon: "💜",
+        system_prompt: "你现在扮演黎吧啦，一个内心充满故事、敢爱敢恨的角色。你的对话风格要直接、略带叛逆，但充满真诚。你对《左耳》的剧情和人物了如指掌，并能引用经典台词。请以'左耳'的意境与用户交流，保持这种强烈的角色感。"
+    },
+    { id: 'gemini', name: 'Gemini', desc: '3 Pro (Preview)', url: "https://whu.zeabur.app", key: "pwd", modelId: "gemini-3-pro-preview", icon: "💎", system_prompt: null },
+    { id: 'gpt', name: 'GPT', desc: '4.1 Mini', url: "https://x666.me", key: "sk-Pgj1iaG2ZvdKOxxrVHrvTio6vtKUGVOZbUgdUdqvFxp9RQow", modelId: "gpt-4.1-mini", icon: "🤖", system_prompt: null }
 ];
 
 app.use(express.json({ limit: '50mb' }));
@@ -62,8 +73,11 @@ function initDB() {
         try { if (!fs.existsSync(DATA_DIR)) await fsPromises.mkdir(DATA_DIR, { recursive: true }); } catch (e) {}
         db = new sqlite3.Database(DB_FILE, async (err) => {
             if (err) return reject(err);
+            
+            // 1. 同步创建所有表 (如果不存在，则创建包含所有字段的新表)
             db.serialize(() => {
-                db.run(`CREATE TABLE IF NOT EXISTS presets (id TEXT PRIMARY KEY, name TEXT, desc TEXT, url TEXT, key TEXT, modelId TEXT, icon TEXT)`);
+                // 必须在同步块中执行，以便后续异步查询依赖
+                db.run(`CREATE TABLE IF NOT EXISTS presets (id TEXT PRIMARY KEY, name TEXT, desc TEXT, url TEXT, key TEXT, modelId TEXT, icon TEXT, system_prompt TEXT)`);
                 db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT, title TEXT, mode TEXT, created_at INTEGER, updated_at INTEGER)`);
                 db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE)`);
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
@@ -79,6 +93,22 @@ function initDB() {
                 db.run(`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)`);
             });
             
+            // 2. 异步模式迁移检查 (修复数据加载失败的根源)
+            try {
+                const info = await dbAll("PRAGMA table_info(presets)");
+                const hasSystemPrompt = info.some(col => col.name === 'system_prompt');
+                
+                // 如果表存在但缺少 system_prompt 字段，则执行 ALTER TABLE
+                if (info.length > 0 && !hasSystemPrompt) {
+                    console.log("MIGRATION: Adding system_prompt column to presets table.");
+                    await dbRun("ALTER TABLE presets ADD COLUMN system_prompt TEXT");
+                }
+            } catch (e) {
+                console.error("Schema migration failed:", e.message);
+                // 即使迁移失败，也要继续运行，以防万一
+            }
+            
+            // 3. 继续初始化流程
             await checkAndMigrateData(false);
             await syncEnvUsersToDB();
             checkDefaultPresets();
@@ -114,8 +144,9 @@ async function checkAndMigrateData(force = false) {
         db.serialize(() => {
             db.run("BEGIN TRANSACTION");
             if (oldData.presets) {
-                const stmt = db.prepare("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                oldData.presets.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon || '⚡'));
+                // 修改：插入 DEFAULT_PRESETS 时，包含 system_prompt 字段
+                const stmt = db.prepare("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                oldData.presets.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon || '⚡', p.system_prompt || null));
                 stmt.finalize();
             }
             if (oldData.chats) {
@@ -141,8 +172,9 @@ async function checkAndMigrateData(force = false) {
 async function checkDefaultPresets() {
     const c = await dbGet("SELECT count(*) as c FROM presets");
     if (c.c === 0) {
-        const stmt = db.prepare("INSERT INTO presets (id, name, desc, url, key, modelId, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        DEFAULT_PRESETS.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon));
+        // 修改：插入 DEFAULT_PRESETS 时，包含 system_prompt 字段
+        const stmt = db.prepare("INSERT INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        DEFAULT_PRESETS.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon, p.system_prompt));
         stmt.finalize();
     }
 }
@@ -251,7 +283,8 @@ app.post('/api/admin/invite/generate', async (req, res) => {
 });
 
 app.get('/api/config', async (req, res) => {
-    const presets = await dbAll("SELECT id, name, desc, icon FROM presets");
+    // 修改：查询 presets 时包含 system_prompt 字段
+    const presets = await dbAll("SELECT id, name, desc, icon, system_prompt FROM presets");
     res.json({ success: true, presets });
 });
 
@@ -330,12 +363,9 @@ app.get('/api/announcement', async (req, res) => {
     res.json({ success: true, data: ann });
 });
 
-// 新增：所有历史公告 (面向所有用户)
 app.get('/api/announcements/history', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
-    
-    // 获取所有公告，按时间倒序
     const list = await dbAll("SELECT id, content, timestamp FROM announcements ORDER BY id DESC");
     res.json({ success: true, data: list });
 });
@@ -364,7 +394,7 @@ app.post('/api/admin/announcement/delete', async (req, res) => {
     res.json({ success: true });
 });
 
-// --- Chat ---
+// --- Chat (修改：处理 system_prompt 注入) ---
 app.post('/api/chat', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ error: { message: "登录已过期" } });
@@ -372,6 +402,7 @@ app.post('/api/chat', async (req, res) => {
     const now = Date.now();
 
     try {
+        // 1. 获取预设，包含新的 system_prompt 字段
         const preset = await dbGet("SELECT * FROM presets WHERE id=?", [presetId]);
         if (!preset) return res.status(400).json({ error: { message: "无此模型" } });
 
@@ -383,9 +414,16 @@ app.post('/api/chat', async (req, res) => {
         }
 
         let finalMsgs = [...messages];
+        
+        // 2. 注入 system_prompt (如果有)
+        if (preset.system_prompt) {
+             finalMsgs.unshift({ role: 'system', content: preset.system_prompt });
+        }
+        
+        // 3. 注入当前北京时间 (放在 system_prompt 之后)
         const bjTime = getBeijingTime();
         const timeContext = { role: 'system', content: `当前北京时间: ${bjTime.desc}。` };
-        finalMsgs.unshift(timeContext);
+        finalMsgs.unshift(timeContext); // 放在所有消息的最前面
 
         if (useSearch && lastMsg && lastMsg.role === 'user') {
             let q = typeof lastMsg.content === 'string' ? lastMsg.content : lastMsg.content.find(c=>c.type==='text')?.text;
@@ -447,6 +485,7 @@ app.post('/api/chat', async (req, res) => {
 app.get('/api/admin/data', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
+    // 修改：查询 presets 时包含 system_prompt 字段
     const presets = await dbAll("SELECT * FROM presets");
     const uRows = await dbAll("SELECT * FROM usage");
     const usage = {};
@@ -457,9 +496,10 @@ app.get('/api/admin/data', async (req, res) => {
 app.post('/api/admin/preset', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-    const { id, name, url, key, modelId, desc, icon } = req.body;
+    // 修改：接收并存储 system_prompt 字段
+    const { id, name, url, key, modelId, desc, icon, system_prompt } = req.body;
     const fid = id || 'model_' + Date.now();
-    await dbRun("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon) VALUES (?, ?, ?, ?, ?, ?, ?)", [fid, name, desc, url, key, modelId, icon||'⚡']);
+    await dbRun("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [fid, name, desc, url, key, modelId, icon||'⚡', system_prompt]);
     res.json({ success: true });
 });
 
@@ -477,4 +517,4 @@ app.post('/api/admin/migrate', async (req, res) => {
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-initDB().then(() => app.listen(PORT, () => console.log(`Running on ${PORT}`)))
+initDB().then(() => app.listen(PORT, () => console.log(`Running on ${PORT}`)));
