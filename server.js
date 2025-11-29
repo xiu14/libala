@@ -18,7 +18,7 @@ for (const key in process.env) {
         userCount++;
     }
 }
-const ADMIN_USER = process.env.USER_ADMIN || "libala"; // 修正：使用 USER_ADMIN 或保留 libala
+const ADMIN_USER = process.env.ADMIN_USER || "libala";
 
 // --- 2. 数据存储 ---
 const DATA_DIR = '/app/data'; 
@@ -73,10 +73,11 @@ function initDB() {
         try { if (!fs.existsSync(DATA_DIR)) await fsPromises.mkdir(DATA_DIR, { recursive: true }); } catch (e) {}
         db = new sqlite3.Database(DB_FILE, async (err) => {
             if (err) return reject(err);
+            
+            // 1. 同步创建所有表 (如果不存在，则创建包含所有字段的新表)
             db.serialize(() => {
-                // --- 预设表修改：新增 system_prompt 字段 ---
+                // 必须在同步块中执行，以便后续异步查询依赖
                 db.run(`CREATE TABLE IF NOT EXISTS presets (id TEXT PRIMARY KEY, name TEXT, desc TEXT, url TEXT, key TEXT, modelId TEXT, icon TEXT, system_prompt TEXT)`);
-                
                 db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT, title TEXT, mode TEXT, created_at INTEGER, updated_at INTEGER)`);
                 db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE)`);
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
@@ -92,6 +93,22 @@ function initDB() {
                 db.run(`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)`);
             });
             
+            // 2. 异步模式迁移检查 (修复数据加载失败的根源)
+            try {
+                const info = await dbAll("PRAGMA table_info(presets)");
+                const hasSystemPrompt = info.some(col => col.name === 'system_prompt');
+                
+                // 如果表存在但缺少 system_prompt 字段，则执行 ALTER TABLE
+                if (info.length > 0 && !hasSystemPrompt) {
+                    console.log("MIGRATION: Adding system_prompt column to presets table.");
+                    await dbRun("ALTER TABLE presets ADD COLUMN system_prompt TEXT");
+                }
+            } catch (e) {
+                console.error("Schema migration failed:", e.message);
+                // 即使迁移失败，也要继续运行，以防万一
+            }
+            
+            // 3. 继续初始化流程
             await checkAndMigrateData(false);
             await syncEnvUsersToDB();
             checkDefaultPresets();
@@ -127,7 +144,7 @@ async function checkAndMigrateData(force = false) {
         db.serialize(() => {
             db.run("BEGIN TRANSACTION");
             if (oldData.presets) {
-                // 修改：处理旧数据迁移，新增 system_prompt 字段
+                // 修改：插入 DEFAULT_PRESETS 时，包含 system_prompt 字段
                 const stmt = db.prepare("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                 oldData.presets.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon || '⚡', p.system_prompt || null));
                 stmt.finalize();
@@ -155,7 +172,7 @@ async function checkAndMigrateData(force = false) {
 async function checkDefaultPresets() {
     const c = await dbGet("SELECT count(*) as c FROM presets");
     if (c.c === 0) {
-        // 修改：插入 DEFAULT_PRESETS 时，包含 system_prompt
+        // 修改：插入 DEFAULT_PRESETS 时，包含 system_prompt 字段
         const stmt = db.prepare("INSERT INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         DEFAULT_PRESETS.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon, p.system_prompt));
         stmt.finalize();
