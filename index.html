@@ -10,15 +10,154 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="style.css">
+    
+    <!-- 登录页专用样式 (移植自 g.html 并适配移动端) -->
+    <style>
+        #login-screen {
+            background: radial-gradient(circle at 30% 20%, #2a2340, #0c0c16) !important;
+            font-family: "Segoe UI", sans-serif;
+            color: #ddd;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            /* 确保覆盖 style.css 的默认样式 */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+        }
+
+        /* 图片 Logo 样式 */
+        .login-logo {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            object-fit: cover; /* 保持图片比例不被拉伸 */
+            margin-bottom: 20px;
+            box-shadow: 0 0 25px rgba(156, 116, 255, 0.4); /* 添加一点紫色光晕呼应主题 */
+            border: 2px solid rgba(156, 116, 255, 0.2);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        .login-title-text {
+            font-size: 24px;
+            margin-bottom: 8px;
+            text-align: center;
+            padding: 0 20px;
+        }
+
+        .login-subtitle {
+            opacity: 0.7;
+            margin-bottom: 30px;
+            font-size: 14px;
+            text-align: center;
+            padding: 0 20px;
+            line-height: 1.5;
+        }
+
+        /* 覆盖原本的 login-box 样式 */
+        #login-screen .login-box {
+            padding: 30px;
+            width: 85%; /* 移动端适配：使用百分比 */
+            max-width: 340px; /* 限制最大宽度 */
+            background: rgba(255,255,255,0.05) !important;
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            position: relative;
+            border: none !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+        }
+
+        /* 左侧亮线装饰 */
+        #login-screen .login-box::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 10%;
+            height: 80%;
+            width: 3px;
+            background: linear-gradient(#9c74ff, #c0a5ff);
+            box-shadow: 0 0 15px #b48dff;
+            border-radius: 2px;
+        }
+
+        /* 输入框样式覆盖 */
+        #login-screen .login-input {
+            width: 100%;
+            padding: 14px; /* 增大触控区域 */
+            margin: 0 0 16px 0;
+            border: none !important;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.12) !important;
+            color: #fff !important;
+            outline: none;
+            font-size: 16px; /* 防止iOS输入时自动放大 */
+            box-sizing: border-box; /* 确保padding不撑大宽度 */
+        }
+        
+        #login-screen .login-input::placeholder {
+            color: rgba(255,255,255,0.5);
+        }
+
+        /* 按钮样式覆盖 */
+        #login-screen .login-btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            background: #9c74ff !important;
+            color: white !important;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        #login-screen .login-btn:hover {
+            background: #b48dff !important;
+            box-shadow: 0 0 20px #b48dff;
+            transform: translateY(-1px);
+        }
+        
+        #login-screen .login-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* 针对超小屏幕手机的微调 */
+        @media (max-height: 600px) {
+            .login-logo { width: 100px; height: 100px; margin-bottom: 10px; }
+            .login-subtitle { margin-bottom: 15px; }
+        }
+    </style>
 </head>
 <body>
 
 <div id="login-screen">
+    <!-- 请确保将你的图片重命名为 logo.png 并放在同一目录下，或者修改下方的 src -->
+    <img src="logo.png" alt="黎吧啦AI" class="login-logo">
+
+    <div class="login-title-text">Welcome to 黎吧啦 AI Station</div>
+    <div class="login-subtitle">左耳亮了，你的智慧信号就该上线了。</div>
+
     <div class="login-box">
-        <div class="login-title">👂🏻黎吧啦AI👂🏻</div>
-        <input type="text" id="loginUser" class="login-input" placeholder="账号">
-        <input type="password" id="loginPass" class="login-input" placeholder="密码">
-        <button class="login-btn" onclick="handleLogin()">进入工作台</button>
+        <!-- 保留了原有ID以便 app.js 识别 -->
+        <input type="text" id="loginUser" class="login-input" placeholder="写上你的代号，黎吧啦在听。" autocomplete="off">
+        <input type="password" id="loginPass" class="login-input" placeholder="嘘，说小声点。">
+        
+        <!-- 保留原有 onclick 事件 -->
+        <button class="login-btn" onclick="handleLogin()">进入站点</button>
+        
+        <!-- 已删除底部的“忘记密码”部分 -->
     </div>
 </div>
 
@@ -52,7 +191,7 @@
                     <i data-lucide="chevron-down"></i>
                 </div>
                 <div class="accordion-body">
-                    <textarea id="announceInput" class="login-input" style="height:80px; resize:vertical;" placeholder="发布新公告 (自动追加当前时间)"></textarea>
+                    <textarea id="announceInput" class="login-input" style="height:80px; resize:vertical; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="发布新公告 (自动追加当前时间)"></textarea>
                     <div style="text-align:right; margin-bottom:16px;">
                         <button class="login-btn" style="width:auto; padding:8px 20px;" onclick="postAnnouncement()">发布</button>
                     </div>
@@ -86,11 +225,11 @@
                         <div style="font-weight:600; margin-bottom:12px; font-size:14px;" id="addFormTitle">添加新预设</div>
                         <input type="hidden" id="addId">
                         <div style="display:grid; gap:12px;">
-                            <input type="text" id="addName" class="login-input" style="margin:0" placeholder="显示名称">
-                            <input type="text" id="addDesc" class="login-input" style="margin:0" placeholder="描述">
-                            <input type="text" id="addUrl" class="login-input" style="margin:0" placeholder="API Base URL">
-                            <input type="text" id="addKey" class="login-input" style="margin:0" placeholder="API Key">
-                            <input type="text" id="addModelId" class="login-input" style="margin:0" placeholder="Model ID">
+                            <input type="text" id="addName" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="显示名称">
+                            <input type="text" id="addDesc" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="描述">
+                            <input type="text" id="addUrl" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="API Base URL">
+                            <input type="text" id="addKey" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="API Key">
+                            <input type="text" id="addModelId" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="Model ID">
                             <div style="display:flex; gap:12px;">
                                 <button class="login-btn" style="flex:1;" onclick="savePreset()" id="savePresetBtn">保存配置</button>
                                 <button class="btn-ghost" style="width:auto; padding:0 20px; border-radius:12px;" onclick="resetPresetForm()">重置</button>
@@ -177,3 +316,4 @@
 <script src="app.js"></script>
 </body>
 </html>
+
