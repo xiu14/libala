@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <!-- 1. 浏览器标题更新 -->
-    <title>左耳 AI | Li Bala's Station</title>
+    <!-- 1. 品牌最终确认：浏览器标题更新 -->
+    <title>左耳 AI | Li Bala's Ear</title>
     
     <!-- ⚡️ 核心修改：预加载 Logo 图片 -->
     <link rel="preload" as="image" href="logo.png">
@@ -180,9 +180,7 @@
 <div id="login-screen">
     <img src="logo.png" alt="左耳AI" class="login-logo">
 
-    <!-- 2. 大标题更新 -->
     <div class="login-title-text">Welcome to 左耳 AI</div>
-    <!-- 3. Slogan 更新 -->
     <div class="login-subtitle">黎吧啦在听。</div>
 
     <div class="login-box">
@@ -302,6 +300,10 @@
                         <div style="display:grid; gap:12px;">
                             <input type="text" id="addName" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="显示名称">
                             <input type="text" id="addDesc" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="描述">
+                            
+                            <!-- 新增：系统提示词 -->
+                            <textarea id="addPrompt" class="login-input" style="margin:0; height:80px; resize:vertical; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="System Prompt (例如：你现在扮演黎吧啦...)"></textarea>
+
                             <input type="text" id="addUrl" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="API Base URL">
                             <input type="text" id="addKey" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="API Key">
                             <input type="text" id="addModelId" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="Model ID">
@@ -357,7 +359,6 @@
                 <button class="icon-btn" onclick="toggleSidebar()" style="color:var(--text-color);"><i data-lucide="menu"></i></button>
                 <div style="font-weight:600; font-size:16px; display:flex; align-items:center; color:var(--text-color);">
                     <span style="width:8px; height:8px; background:#10b981; border-radius:50%; margin-right:8px; display:inline-block;"></span>
-                    <!-- 站名更新 -->
                     <span id="headerTitle">左耳 AI</span>
                 </div>
             </div>
@@ -380,7 +381,6 @@
                     <i data-lucide="globe"></i>
                 </button>
 
-                <!-- 4. 聊天输入框 placeholder 更新 -->
                 <textarea id="userInput" placeholder="黎吧啦正在聆听..." rows="1" oninput="autoResize(this)"></textarea>
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()">
                     <i data-lucide="arrow-up"></i>
