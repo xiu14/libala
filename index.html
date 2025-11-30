@@ -279,9 +279,9 @@
                 </div>
             </div>
 
-            <!-- 3. 数据统计 -->
+            <!-- 3. 数据统计 (已修改：点击自动刷新) -->
             <div class="accordion-item">
-                <div class="accordion-header" onclick="toggleAccordion(this)">
+                <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminStats();">
                     <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="bar-chart-3"></i> 调用统计</span>
                     <i data-lucide="chevron-down"></i>
                 </div>
@@ -290,9 +290,9 @@
                 </div>
             </div>
             
-            <!-- 4. 模型预设管理 -->
+            <!-- 4. 模型预设管理 (已修改：点击自动刷新) -->
             <div class="accordion-item">
-                <div class="accordion-header" onclick="toggleAccordion(this)">
+                <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminPresets();">
                     <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="cpu"></i> 模型预设管理</span>
                     <i data-lucide="chevron-down"></i>
                 </div>
@@ -403,5 +403,4 @@
 <script src="app.js"></script>
 </body>
 </html>
-
 
