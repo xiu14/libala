@@ -62,7 +62,7 @@ body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, Bl
 }
 [data-theme="dark"] .session-item:hover { background: rgba(255,255,255,0.03); }
 
-/* 基础样式 (登录页主要由 index.html 的内联样式覆盖，这里保留基础结构) */
+/* 基础样式 */
 #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; }
 .login-box { background: var(--chat-bg); padding: 40px; border-radius: 24px; border: 1px solid var(--border-color); width: 90%; max-width: 360px; text-align: center; box-shadow: var(--shadow); }
 .login-input { width: 100%; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--border-color); border-radius: 12px; font-size: 15px; background: var(--bg-color); color: var(--text-color); }
@@ -82,9 +82,45 @@ body, html { height: 100%; margin: 0; padding: 0; font-family: -apple-system, Bl
 
 .section-title { font-size: 11px; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; padding-left: 4px; }
 .mode-list { display: grid; grid-template-columns: 1fr; gap: 6px; }
+
 .mode-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--chat-bg); border: 1px solid var(--border-color); cursor: pointer; transition: all 0.2s; }
 .mode-card:hover { border-color: var(--text-secondary); transform: translateY(-1px); }
-.mode-icon { font-size: 18px; width: 24px; text-align: center; }
+
+/* --- 2. 优化后的图标样式 (Logo支持) --- */
+.mode-icon { 
+    font-size: 20px; 
+    width: 36px; 
+    height: 36px; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center; 
+    border-radius: 8px; /* 圆角矩形背景 */
+    background: rgba(255, 255, 255, 0.05); /* 轻微背景色 */
+    border: 1px solid rgba(0,0,0,0.05);
+    overflow: hidden; /* 防止图片溢出 */
+    flex-shrink: 0;
+}
+
+/* 图片 Logo 的专用样式 */
+.model-logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* 保持图片比例 */
+    padding: 4px; /* 留出一点内边距 */
+    border-radius: 4px;
+}
+
+/* 深色模式下图标微调 */
+[data-theme="dark"] .mode-icon {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+[data-theme="dark"] .mode-card:hover .mode-icon {
+    background: rgba(156, 116, 255, 0.2); /* 悬停时紫色背景 */
+    border-color: rgba(156, 116, 255, 0.3);
+}
+
 .mode-info div:first-child { font-size: 14px; font-weight: 500; }
 .mode-info div:last-child { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 
