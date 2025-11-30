@@ -290,7 +290,7 @@
                 </div>
             </div>
             
-            <!-- 4. 模型预设 (新增 System Prompt) -->
+            <!-- 4. 模型预设 (修改点：让 ID 字段可见) -->
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this)">
                     <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="cpu"></i> 模型预设管理</span>
@@ -300,8 +300,11 @@
                     <div id="adminPresetList" style="margin-bottom:16px; display:flex; flex-direction:column; gap:8px;"></div>
                     <div style="background:var(--bg-color); padding:16px; border-radius:8px; border:1px solid var(--border-color); margin-top:16px;">
                         <div style="font-weight:600; margin-bottom:12px; font-size:14px;" id="addFormTitle">添加新预设</div>
-                        <input type="hidden" id="addId">
-                        <div style="display:grid; gap:12px;">
+                        
+                        <!-- 修改：ID 输入框现在是 text 类型，且有提示 -->
+                        <input type="text" id="addId" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="ID (留空自动生成，置顶填 libala_main)">
+                        
+                        <div style="display:grid; gap:12px; margin-top:12px;">
                             <input type="text" id="addName" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="显示名称">
                             <input type="text" id="addDesc" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="描述">
                             
@@ -398,4 +401,5 @@
 <script src="app.js"></script>
 </body>
 </html>
+
 
