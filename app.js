@@ -330,10 +330,29 @@ async function fetchPresets() {
         } 
     } catch(e){}
 }
+
+// 渲染侧边栏模型列表 (已支持图片Logo)
 function renderPresetsSidebar() {
-    const list = document.getElementById('presetList'); list.innerHTML = '';
-    PRESETS.forEach(p => { list.innerHTML += `<div class="mode-card" onclick="createNewSession('${p.id}')"><div class="mode-icon">${p.icon||'⚡'}</div><div class="mode-info"><div>${p.name}</div><div>${p.desc}</div></div></div>`; });
+    const list = document.getElementById('presetList'); 
+    list.innerHTML = '';
+    PRESETS.forEach(p => { 
+        let iconHtml = p.icon || '⚡';
+        // 检查 icon 是否为 URL (http 开头, / 开头, 或 data:image 开头)
+        if (iconHtml.startsWith('http') || iconHtml.startsWith('/') || iconHtml.startsWith('data:image')) {
+            iconHtml = `<img src="${iconHtml}" class="model-logo-img" alt="${p.name}">`;
+        }
+
+        list.innerHTML += `
+        <div class="mode-card" onclick="createNewSession('${p.id}')">
+            <div class="mode-icon">${iconHtml}</div>
+            <div class="mode-info">
+                <div>${p.name}</div>
+                <div>${p.desc}</div>
+            </div>
+        </div>`; 
+    });
 }
+
 async function openAdmin() {
     document.getElementById('adminModal').classList.add('open');
     const res = await fetch('/api/admin/data', { headers: { 'Authorization': `Bearer ${authToken}` } });
@@ -365,8 +384,11 @@ function editPreset(jsonStr) {
     const p = JSON.parse(jsonStr);
     document.getElementById('addId').value=p.id; 
     document.getElementById('addName').value=p.name; 
+    // 图标输入框
+    document.getElementById('addIcon').value=p.icon || '';
+    
     document.getElementById('addDesc').value=p.desc; 
-    document.getElementById('addPrompt').value=p.system_prompt || ''; // 填充 system_prompt
+    document.getElementById('addPrompt').value=p.system_prompt || ''; 
     document.getElementById('addUrl').value=p.url; 
     document.getElementById('addKey').value=p.key; 
     document.getElementById('addModelId').value=p.modelId;
@@ -393,7 +415,8 @@ async function savePreset() {
         key:document.getElementById('addKey').value, 
         modelId:document.getElementById('addModelId').value, 
         desc:document.getElementById('addDesc').value,
-        system_prompt: document.getElementById('addPrompt').value.trim() // 保存 system_prompt
+        icon:document.getElementById('addIcon').value, // 保存图标
+        system_prompt: document.getElementById('addPrompt').value.trim() 
     };
     if(!p.name||!p.url||!p.key||!p.modelId) return alert("请填写完整");
     await fetch('/api/admin/preset', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify(p) });
@@ -418,9 +441,15 @@ async function fetchSessions() {
         });
         ['今天', '昨天', '7天内', '更早'].forEach(label => {
             if (groups[label].length) {
+                // 会话列表中的图标，如果是图片则显示图片，否则显示文字
                 container.innerHTML += `<div class="session-group"><div class="group-header">${label}</div>` + groups[label].map(s => {
                     const p = PRESETS.find(x => x.id === s.mode);
-                    return `<div class="session-item ${s.id === currentSessionId ? 'active' : ''}" onclick="loadSession('${s.id}')"><div class="session-title"><span style="font-size:16px;">${p?p.icon:''}</span><span>${s.title}</span></div><div class="session-actions"><button class="icon-btn" onclick="renameSession('${s.id}','${s.title}');event.stopPropagation()"><i data-lucide="edit-2" style="width:14px"></i></button><button class="icon-btn" style="color:var(--danger-color)" onclick="deleteSession('${s.id}');event.stopPropagation()"><i data-lucide="trash-2" style="width:14px"></i></button></div></div>`;
+                    let iconStr = p ? (p.icon || '⚡') : '⚡';
+                    // 简单判断，如果是URL则显示图片
+                    if(iconStr.startsWith('http') || iconStr.startsWith('/')) {
+                        iconStr = `<img src="${iconStr}" style="width:16px;height:16px;object-fit:contain;border-radius:2px;">`;
+                    }
+                    return `<div class="session-item ${s.id === currentSessionId ? 'active' : ''}" onclick="loadSession('${s.id}')"><div class="session-title"><span style="font-size:16px;display:flex;align-items:center;">${iconStr}</span><span>${s.title}</span></div><div class="session-actions"><button class="icon-btn" onclick="renameSession('${s.id}','${s.title}');event.stopPropagation()"><i data-lucide="edit-2" style="width:14px"></i></button><button class="icon-btn" style="color:var(--danger-color)" onclick="deleteSession('${s.id}');event.stopPropagation()"><i data-lucide="trash-2" style="width:14px"></i></button></div></div>`;
                 }).join('') + `</div>`;
             }
         });
