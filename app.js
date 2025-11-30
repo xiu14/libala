@@ -1,4 +1,4 @@
-let PRESETS = [], currentSessionId = null, isRequesting = false, uploadedFiles = [];
+let PRESETS = [], currentSessionId = null, currentAiAvatar = null, isRequesting = false, uploadedFiles = [];
 let authToken = localStorage.getItem('authToken'), isAdmin = localStorage.getItem('isAdmin') === 'true';
 let isSearchEnabled = false;
 
@@ -338,7 +338,7 @@ function renderPresetsSidebar() {
     PRESETS.forEach(p => { 
         let iconHtml = p.icon || '⚡';
         // 检查 icon 是否为 URL (http 开头, / 开头, 或 data:image 开头)
-        if (iconHtml.startsWith('http') || iconHtml.startsWith('/') || iconHtml.startsWith('data:image')) {
+        if (iconHtml.startsWith('http') || iconHtml.startsWith('/') || iconHtml.startsWith('data:image') || iconHtml.includes('.')) {
             iconHtml = `<img src="${iconHtml}" class="model-logo-img" alt="${p.name}">`;
         }
 
@@ -446,7 +446,7 @@ async function fetchSessions() {
                     const p = PRESETS.find(x => x.id === s.mode);
                     let iconStr = p ? (p.icon || '⚡') : '⚡';
                     // 简单判断，如果是URL则显示图片
-                    if(iconStr.startsWith('http') || iconStr.startsWith('/')) {
+                    if(iconStr.startsWith('http') || iconStr.startsWith('/') || iconStr.includes('.')) {
                         iconStr = `<img src="${iconStr}" style="width:16px;height:16px;object-fit:contain;border-radius:2px;">`;
                     }
                     return `<div class="session-item ${s.id === currentSessionId ? 'active' : ''}" onclick="loadSession('${s.id}')"><div class="session-title"><span style="font-size:16px;display:flex;align-items:center;">${iconStr}</span><span>${s.title}</span></div><div class="session-actions"><button class="icon-btn" onclick="renameSession('${s.id}','${s.title}');event.stopPropagation()"><i data-lucide="edit-2" style="width:14px"></i></button><button class="icon-btn" style="color:var(--danger-color)" onclick="deleteSession('${s.id}');event.stopPropagation()"><i data-lucide="trash-2" style="width:14px"></i></button></div></div>`;
@@ -457,6 +457,7 @@ async function fetchSessions() {
         lucide.createIcons();
     }
 }
+
 async function loadSession(id) {
     if(isRequesting) return;
     currentSessionId = id;
@@ -466,6 +467,13 @@ async function loadSession(id) {
     try {
         const res = await fetch(`/api/session/${id}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
         const json = await res.json();
+        
+        // --- 新增逻辑开始：获取当前模型的图标 ---
+        const currentPreset = PRESETS.find(p => p.id === json.session.mode);
+        // 如果找到了预设就用预设的图标，否则默认用 'bot' (Lucide图标名)
+        currentAiAvatar = currentPreset ? (currentPreset.icon || 'bot') : 'bot';
+        // --- 新增逻辑结束 ---
+        
         document.getElementById('headerTitle').innerText = json.session.title;
         const box = document.getElementById('chat-box'); box.innerHTML = '';
         if (json.messages.length === 0) 
@@ -475,6 +483,7 @@ async function loadSession(id) {
         if(window.innerWidth < 1000) { document.getElementById('sidebar').classList.remove('open'); document.querySelector('.overlay').classList.remove('show'); }
     } catch(e) { document.getElementById('chat-box').innerHTML = "加载失败"; }
 }
+
 async function createNewSession(pid) {
     const res = await fetch('/api/session/new', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ presetId: pid }) });
     const json = await res.json();
@@ -557,8 +566,30 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     const div = document.createElement('div');
     div.className = `message-row ${role === 'user' ? 'user' : 'ai'}`;
     div.id = id || ('msg-' + Date.now());
+    
+    // --- 核心修改：动态生成头像 HTML ---
+    let avatarHtml = '';
+    if (role === 'user') {
+        // 用户头像保持不变 (Lucide user 图标)
+        avatarHtml = `<i data-lucide="user" style="width:18px"></i>`;
+    } else {
+        // AI 头像逻辑
+        const icon = currentAiAvatar || 'bot'; // 获取当前图标
+        
+        if (icon.startsWith('http') || icon.startsWith('/') || icon.startsWith('data:') || icon.includes('.')) {
+            // 1. 如果是图片 URL (http, /, base64) 或包含点(如 .png) -> 渲染 <img>
+            avatarHtml = `<img src="${icon}" style="width:100%; height:100%; object-fit: cover;">`;
+        } else if (/^[\u0000-\u007F]+$/.test(icon) && icon.length > 2) {
+            // 2. 如果是纯英文且长度大于2 (例如 'bot', 'sparkles') -> 认为是 Lucide 图标名
+            avatarHtml = `<i data-lucide="${icon}" style="width:18px"></i>`;
+        } else {
+            // 3. 其他情况 (主要是 Emoji) -> 直接渲染文字
+            avatarHtml = `<span style="font-size: 20px; line-height: 1;">${icon}</span>`;
+        }
+    }
+
     let cHtml = role==='user' ? (images.map(u=>`<img src="${u}"><br>`).join('') + text.replace(/</g, "&lt;")) : (isLoading ? '<span style="color:var(--text-secondary)">Thinking...</span>' : DOMPurify.sanitize(marked.parse(text)));
-    div.innerHTML = `<div class="avatar ${role==='user'?'user-avatar':'ai-avatar'}"><i data-lucide="${role==='user'?'user':'bot'}" style="width:18px"></i></div><div class="message-bubble"><div class="message-content">${cHtml}</div>${(timestamp&&!isLoading)?`<div class="msg-meta">${formatTime(timestamp)}</div>`:''}</div>`;
+    div.innerHTML = `<div class="avatar ${role==='user'?'user-avatar':'ai-avatar'}">${avatarHtml}</div><div class="message-bubble"><div class="message-content">${cHtml}</div>${(timestamp&&!isLoading)?`<div class="msg-meta">${formatTime(timestamp)}</div>`:''}</div>`;
     box.appendChild(div); box.scrollTop = box.scrollHeight; lucide.createIcons({ root: div });
     return div.id;
 }
