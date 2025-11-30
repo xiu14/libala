@@ -353,6 +353,7 @@ function renderPresetsSidebar() {
     });
 }
 
+// --- 修复后的管理后台打开逻辑 (修复统计显示URL的问题) ---
 async function openAdmin() {
     document.getElementById('adminModal').classList.add('open');
     const res = await fetch('/api/admin/data', { headers: { 'Authorization': `Bearer ${authToken}` } });
@@ -364,10 +365,33 @@ async function openAdmin() {
             for (const [mid, c] of Object.entries(map)) { 
                 t+=c; 
                 const preset = data.presets.find(p => p.id === mid);
-                const name = preset ? `${preset.icon||''} ${preset.name}` : mid;
-                list+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${name}</span><strong>${c}</strong></div>`; 
+                
+                // --- 修复开始：判断图标是 URL 还是 Emoji ---
+                let iconHtml = '';
+                if (preset) {
+                    const rawIcon = preset.icon || '';
+                    if (rawIcon.startsWith('http') || rawIcon.startsWith('/') || rawIcon.startsWith('data:') || rawIcon.includes('.')) {
+                        // 如果是图片URL，渲染一个小图片
+                        iconHtml = `<img src="${rawIcon}" style="width:16px;height:16px;object-fit:contain;vertical-align:text-bottom;margin-right:4px;border-radius:2px;">`;
+                    } else {
+                        // 否则当做文字/Emoji显示
+                        iconHtml = rawIcon + ' ';
+                    }
+                }
+                const displayName = preset ? `${preset.name}` : mid; // 名字和图标分开处理
+                // --- 修复结束 ---
+
+                list+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
+                    <span style="display:flex;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85%;">
+                        ${iconHtml} ${displayName}
+                    </span>
+                    <strong>${c}</strong>
+                </div>`; 
             }
-            grid.innerHTML += `<div style="background:var(--bg-color);border:1px solid var(--border-color);padding:16px;border-radius:12px;"><div style="font-weight:600;margin-bottom:8px;">${u} <span style="float:right;background:var(--primary-color);color:#fff;padding:0 6px;border-radius:8px;font-size:12px;">${t}</span></div>${list}</div>`;
+            grid.innerHTML += `<div style="background:var(--bg-color);border:1px solid var(--border-color);padding:16px;border-radius:12px;">
+                <div style="font-weight:600;margin-bottom:8px;">${u} <span style="float:right;background:var(--primary-color);color:#fff;padding:0 6px;border-radius:8px;font-size:12px;">${t}</span></div>
+                ${list}
+            </div>`;
         }
     }
     const pl = document.getElementById('adminPresetList'); pl.innerHTML = '';
