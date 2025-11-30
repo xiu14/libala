@@ -284,7 +284,8 @@ async function deleteAnnouncement(id) {
 // --- 管理后台：邀请码逻辑 ---
 async function fetchInviteInfo() {
     try {
-        const res = await fetch('/api/admin/invite/info', { headers: { 'Authorization': `Bearer ${authToken}` } });
+        // 增加时间戳防止缓存
+        const res = await fetch(`/api/admin/invite/info?_=${Date.now()}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
         const data = await res.json();
         if (data.success) {
             const statusText = document.getElementById('inviteStatusText');
@@ -331,13 +332,12 @@ async function fetchPresets() {
     } catch(e){}
 }
 
-// 渲染侧边栏模型列表 (已支持图片Logo)
+// 渲染侧边栏模型列表
 function renderPresetsSidebar() {
     const list = document.getElementById('presetList'); 
     list.innerHTML = '';
     PRESETS.forEach(p => { 
         let iconHtml = p.icon || '⚡';
-        // 检查 icon 是否为 URL (http 开头, / 开头, 或 data:image 开头)
         if (iconHtml.startsWith('http') || iconHtml.startsWith('/') || iconHtml.startsWith('data:image') || iconHtml.includes('.')) {
             iconHtml = `<img src="${iconHtml}" class="model-logo-img" alt="${p.name}">`;
         }
@@ -353,54 +353,70 @@ function renderPresetsSidebar() {
     });
 }
 
-// --- 修复后的管理后台打开逻辑 (修复统计显示URL的问题) ---
+// --- 拆分后的管理后台逻辑 (独立刷新) ---
+
+// 1. 打开后台 (只负责显示 Modal 和初始加载)
 async function openAdmin() {
     document.getElementById('adminModal').classList.add('open');
-    const res = await fetch('/api/admin/data', { headers: { 'Authorization': `Bearer ${authToken}` } });
-    const data = await res.json();
-    const grid = document.getElementById('statGrid'); grid.innerHTML = '';
-    if (data.usage) {
-        for (const [u, map] of Object.entries(data.usage)) {
-            let t = 0, list = '';
-            for (const [mid, c] of Object.entries(map)) { 
-                t+=c; 
-                const preset = data.presets.find(p => p.id === mid);
-                
-                // --- 修复开始：判断图标是 URL 还是 Emoji ---
-                let iconHtml = '';
-                if (preset) {
-                    const rawIcon = preset.icon || '';
-                    if (rawIcon.startsWith('http') || rawIcon.startsWith('/') || rawIcon.startsWith('data:') || rawIcon.includes('.')) {
-                        // 如果是图片URL，渲染一个小图片
-                        iconHtml = `<img src="${rawIcon}" style="width:16px;height:16px;object-fit:contain;vertical-align:text-bottom;margin-right:4px;border-radius:2px;">`;
-                    } else {
-                        // 否则当做文字/Emoji显示
-                        iconHtml = rawIcon + ' ';
-                    }
-                }
-                const displayName = preset ? `${preset.name}` : mid; // 名字和图标分开处理
-                // --- 修复结束 ---
+    await fetchAdminStats();
+    await fetchAdminPresets();
+}
 
-                list+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
-                    <span style="display:flex;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85%;">
-                        ${iconHtml} ${displayName}
-                    </span>
-                    <strong>${c}</strong>
-                </div>`; 
+// 2. 独立获取统计数据 (加了防缓存)
+async function fetchAdminStats() {
+    const grid = document.getElementById('statGrid'); 
+    // grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:10px;">加载中...</div>'; // 可选：加载状态，为了体验暂不加
+    try {
+        const res = await fetch(`/api/admin/data?_=${Date.now()}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        const data = await res.json();
+        if (data.success && data.usage) {
+            grid.innerHTML = '';
+            for (const [u, map] of Object.entries(data.usage)) {
+                let t = 0, list = '';
+                for (const [mid, c] of Object.entries(map)) { 
+                    t+=c; 
+                    const preset = data.presets.find(p => p.id === mid);
+                    let iconHtml = '';
+                    if (preset) {
+                        const rawIcon = preset.icon || '';
+                        if (rawIcon.startsWith('http') || rawIcon.startsWith('/') || rawIcon.startsWith('data:') || rawIcon.includes('.')) {
+                            iconHtml = `<img src="${rawIcon}" style="width:16px;height:16px;object-fit:contain;vertical-align:text-bottom;margin-right:4px;border-radius:2px;">`;
+                        } else {
+                            iconHtml = rawIcon + ' ';
+                        }
+                    }
+                    const displayName = preset ? `${preset.name}` : mid; 
+                    list+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
+                        <span style="display:flex;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85%;">
+                            ${iconHtml} ${displayName}
+                        </span>
+                        <strong>${c}</strong>
+                    </div>`; 
+                }
+                grid.innerHTML += `<div style="background:var(--bg-color);border:1px solid var(--border-color);padding:16px;border-radius:12px;">
+                    <div style="font-weight:600;margin-bottom:8px;">${u} <span style="float:right;background:var(--primary-color);color:#fff;padding:0 6px;border-radius:8px;font-size:12px;">${t}</span></div>
+                    ${list}
+                </div>`;
             }
-            grid.innerHTML += `<div style="background:var(--bg-color);border:1px solid var(--border-color);padding:16px;border-radius:12px;">
-                <div style="font-weight:600;margin-bottom:8px;">${u} <span style="float:right;background:var(--primary-color);color:#fff;padding:0 6px;border-radius:8px;font-size:12px;">${t}</span></div>
-                ${list}
-            </div>`;
         }
-    }
-    const pl = document.getElementById('adminPresetList'); pl.innerHTML = '';
-    data.presets.forEach(p => {
-        // 传递整个预设对象（包含 system_prompt）用于编辑
-        const presetJsonString = JSON.stringify(p);
-        pl.innerHTML += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-color);border:1px solid var(--border-color);border-radius:8px;"><div><strong>${p.name}</strong></div><div><button class="icon-btn" onclick='editPreset(JSON.stringify(${presetJsonString}))'><i data-lucide="edit-3" style="width:16px;"></i></button><button class="icon-btn" style="color:var(--danger-color);" onclick="deletePreset('${p.id}')"><i data-lucide="trash-2" style="width:16px;"></i></button></div></div>`;
-    });
-    lucide.createIcons();
+    } catch(e) { console.error("Stats load failed", e); }
+}
+
+// 3. 独立获取后台预设列表 (用于保存后刷新)
+async function fetchAdminPresets() {
+    const pl = document.getElementById('adminPresetList');
+    try {
+        const res = await fetch(`/api/admin/data?_=${Date.now()}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        const data = await res.json();
+        if (data.success && data.presets) {
+            pl.innerHTML = '';
+            data.presets.forEach(p => {
+                const presetJsonString = JSON.stringify(p);
+                pl.innerHTML += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-color);border:1px solid var(--border-color);border-radius:8px;"><div><strong>${p.name}</strong></div><div><button class="icon-btn" onclick='editPreset(JSON.stringify(${presetJsonString}))'><i data-lucide="edit-3" style="width:16px;"></i></button><button class="icon-btn" style="color:var(--danger-color)" onclick="deletePreset('${p.id}')"><i data-lucide="trash-2" style="width:16px;"></i></button></div></div>`;
+            });
+            lucide.createIcons();
+        }
+    } catch(e) { console.error("Presets load failed", e); }
 }
 
 // 填充 system_prompt
@@ -408,9 +424,7 @@ function editPreset(jsonStr) {
     const p = JSON.parse(jsonStr);
     document.getElementById('addId').value=p.id; 
     document.getElementById('addName').value=p.name; 
-    // 图标输入框
     document.getElementById('addIcon').value=p.icon || '';
-    
     document.getElementById('addDesc').value=p.desc; 
     document.getElementById('addPrompt').value=p.system_prompt || ''; 
     document.getElementById('addUrl').value=p.url; 
@@ -421,7 +435,7 @@ function editPreset(jsonStr) {
     document.querySelectorAll('.accordion-item')[3].classList.add('active'); 
 }
 
-// 清空 system_prompt
+// 清空
 function resetPresetForm() {
     document.getElementById('addId').value=''; 
     document.getElementById('addPrompt').value=''; 
@@ -430,7 +444,7 @@ function resetPresetForm() {
     document.getElementById('savePresetBtn').innerText="保存";
 }
 
-// 保存 system_prompt
+// 保存预设 (修复：保存后停留在当前位置)
 async function savePreset() {
     const p = { 
         id:document.getElementById('addId').value, 
@@ -439,15 +453,30 @@ async function savePreset() {
         key:document.getElementById('addKey').value, 
         modelId:document.getElementById('addModelId').value, 
         desc:document.getElementById('addDesc').value,
-        icon:document.getElementById('addIcon').value, // 保存图标
+        icon:document.getElementById('addIcon').value,
         system_prompt: document.getElementById('addPrompt').value.trim() 
     };
     if(!p.name||!p.url||!p.key||!p.modelId) return alert("请填写完整");
+    
+    // 1. 记录当前滚动条位置
+    const scrollContainer = document.querySelector('.admin-body');
+    const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+
     await fetch('/api/admin/preset', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify(p) });
-    resetPresetForm(); openAdmin(); fetchPresets();
+    
+    resetPresetForm(); 
+    
+    // 2. 局部刷新列表，而不是重开 Modal
+    await fetchAdminPresets(); 
+    await fetchPresets(); // 刷新侧边栏
+    
+    // 3. 恢复滚动条位置
+    if (scrollContainer) {
+        scrollContainer.scrollTop = savedScrollTop;
+    }
 }
 
-// --- 会话/聊天逻辑 (修复) ---
+// --- 会话/聊天逻辑 ---
 async function fetchSessions() {
     const res = await fetch('/api/sessions', { headers: { 'Authorization': `Bearer ${authToken}` } });
     const json = await res.json();
@@ -465,11 +494,9 @@ async function fetchSessions() {
         });
         ['今天', '昨天', '7天内', '更早'].forEach(label => {
             if (groups[label].length) {
-                // 会话列表中的图标，如果是图片则显示图片，否则显示文字
                 container.innerHTML += `<div class="session-group"><div class="group-header">${label}</div>` + groups[label].map(s => {
                     const p = PRESETS.find(x => x.id === s.mode);
                     let iconStr = p ? (p.icon || '⚡') : '⚡';
-                    // 简单判断，如果是URL则显示图片
                     if(iconStr.startsWith('http') || iconStr.startsWith('/') || iconStr.includes('.')) {
                         iconStr = `<img src="${iconStr}" style="width:16px;height:16px;object-fit:contain;border-radius:2px;">`;
                     }
@@ -492,11 +519,8 @@ async function loadSession(id) {
         const res = await fetch(`/api/session/${id}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
         const json = await res.json();
         
-        // --- 新增逻辑开始：获取当前模型的图标 ---
         const currentPreset = PRESETS.find(p => p.id === json.session.mode);
-        // 如果找到了预设就用预设的图标，否则默认用 'bot' (Lucide图标名)
         currentAiAvatar = currentPreset ? (currentPreset.icon || 'bot') : 'bot';
-        // --- 新增逻辑结束 ---
         
         document.getElementById('headerTitle').innerText = json.session.title;
         const box = document.getElementById('chat-box'); box.innerHTML = '';
@@ -591,23 +615,16 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     div.className = `message-row ${role === 'user' ? 'user' : 'ai'}`;
     div.id = id || ('msg-' + Date.now());
     
-    // --- 核心修改：动态生成头像 HTML ---
     let avatarHtml = '';
     if (role === 'user') {
-        // 用户头像保持不变 (Lucide user 图标)
         avatarHtml = `<i data-lucide="user" style="width:18px"></i>`;
     } else {
-        // AI 头像逻辑
-        const icon = currentAiAvatar || 'bot'; // 获取当前图标
-        
+        const icon = currentAiAvatar || 'bot';
         if (icon.startsWith('http') || icon.startsWith('/') || icon.startsWith('data:') || icon.includes('.')) {
-            // 1. 如果是图片 URL (http, /, base64) 或包含点(如 .png) -> 渲染 <img>
             avatarHtml = `<img src="${icon}" style="width:100%; height:100%; object-fit: cover;">`;
         } else if (/^[\u0000-\u007F]+$/.test(icon) && icon.length > 2) {
-            // 2. 如果是纯英文且长度大于2 (例如 'bot', 'sparkles') -> 认为是 Lucide 图标名
             avatarHtml = `<i data-lucide="${icon}" style="width:18px"></i>`;
         } else {
-            // 3. 其他情况 (主要是 Emoji) -> 直接渲染文字
             avatarHtml = `<span style="font-size: 20px; line-height: 1;">${icon}</span>`;
         }
     }
@@ -632,9 +649,6 @@ function renderPreviews() {
     }); lucide.createIcons();
 }
 function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
-
-// --- 其他原有逻辑 ---
-
 function toggleAccordion(header) { header.parentElement.classList.toggle('active'); }
 let searchTimeout;
 async function handleSearch(query) {
@@ -651,7 +665,10 @@ async function handleSearch(query) {
         }
     }, 300); 
 }
-async function deletePreset(id) { if(confirm("删除?")) { await fetch('/api/admin/preset/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id }) }); openAdmin(); fetchPresets(); } }
+async function deletePreset(id) { if(confirm("删除?")) { await fetch('/api/admin/preset/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id }) }); 
+    // 修改为局部刷新
+    fetchAdminPresets(); fetchPresets(); 
+} }
 async function forceMigrate() { if(confirm("导入旧数据?")) { const res=await fetch('/api/admin/migrate', { method:'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); alert((await res.json()).message); location.reload(); } }
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.querySelector('.overlay').classList.toggle('show'); }
 function toggleTheme() { const n = document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'; document.documentElement.setAttribute('data-theme',n); localStorage.setItem('theme',n); lucide.createIcons(); }
