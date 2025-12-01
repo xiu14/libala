@@ -102,8 +102,6 @@ async function handleSubmit() {
     }
 }
 
-// ... (handleRegister 和 handleLogin 等函数保持不变)
-
 // --- 切换 登录/注册 模式 ---
 function toggleRegisterMode() {
     isRegisterMode = !isRegisterMode;
@@ -379,8 +377,7 @@ function copyText(text) {
     // 使用 document.execCommand('copy') 作为备用方案
     if (navigator.clipboard) {
         navigator.clipboard.writeText(text).then(() => { 
-            // alert("已复制: " + text); 
-            // 避免使用 alert，这里可以改用一个轻量级提示
+            // 避免使用 alert，这里改用一个轻量级提示
             showToast("已复制到剪贴板");
         }); 
     } else {
@@ -555,7 +552,6 @@ async function savePreset() {
     if (scrollContainer) scrollContainer.scrollTop = savedScrollTop;
 }
 
-// ... (fetchSessions, loadSession, createNewSession, renameSession, deleteSession 等函数保持不变)
 // --- 辅助函数：替换 Alert 和 Copy Code ---
 function showToast(message) {
     // 避免使用 alert()。使用轻量级提示。
@@ -730,7 +726,7 @@ async function loadSession(id) {
                 }
                 
                 // 给 AI 消息一个 ID，用于重新生成
-                const msgId = m.role === 'ai' ? `msg-${m.timestamp}-${Math.random().toString(36).substring(2, 6)}` : null; 
+                const msgId = m.role === 'assistant' ? `msg-${m.timestamp}-${Math.random().toString(36).substring(2, 6)}` : null; 
                 appendUI(msgId, m.role, textContent, images, false, m.timestamp);
             } catch (err) {
                 console.error("渲染消息失败:", err);
@@ -771,33 +767,40 @@ async function regenerateResponse(msgId) {
 
     // 1. 从 DOM 中移除旧的 AI 消息
     const oldAiMsg = document.getElementById(msgId);
-    if (oldAiMsg) {
-        oldAiMsg.remove();
-    } else {
-        showToast("无法定位旧消息进行删除。");
+    if (!oldAiMsg) {
+        showToast("无法定位旧消息进行删除，请刷新。");
+        return;
     }
+
+    // 在移除之前，获取它的前一个兄弟元素（用户消息），并检查它是用户消息
+    const userMsg = oldAiMsg.previousElementSibling;
+    if (!userMsg || !userMsg.classList.contains('user')) {
+         showToast("消息结构错误或上下文不完整，正在重新加载会话...");
+         loadSession(currentSessionId);
+         return;
+    }
+       
+    // 移除旧的 AI 消息
+    oldAiMsg.remove();
+    
 
     // 2. 重新加载会话以获取最新的消息列表
     const sessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
     const sessData = await sessRes.json();
     
-    // 3. 构造新的 messages 列表
-    // 移除最后一条消息（即用户发送的消息，这是我们想要重新生成其回复的消息）
-    const lastUserMsg = sessData.messages[sessData.messages.length - 1];
-    
-    // 确保最后一条是用户消息，且不是正在进行中的请求
-    if (!lastUserMsg || lastUserMsg.role !== 'user') {
-        showToast("无法进行重新生成，最后一条消息不是用户发送的。");
-        // 重新加载页面来修正UI
-        loadSession(currentSessionId);
+    // 3. 构造用于 API 的消息列表
+    const messages = sessData.messages.map(m => ({ role: m.role, content: m.content }));
+    const lastMsg = messages[messages.length - 1];
+
+    if (!lastMsg || lastMsg.role !== 'user') {
+        showToast("无法进行重新生成，消息上下文不完整。");
+        loadSession(currentSessionId); // 重新加载会话
         return;
     }
-
-    // 4. 构造用于发送给 API 的消息列表 (包含用户消息)
-    const msgsForApi = sessData.messages.map(m => ({ role: m.role, content: m.content }));
     
-    // 5. 立即发起请求
-    await sendMessage(msgsForApi, true, sessData.session.mode);
+    // 4. 发起请求
+    // 注意：我们将完整的消息历史（以用户消息结束）发送给后端，并标记 isRegenerate
+    await sendMessage(messages, true, sessData.session.mode);
 }
 
 
@@ -815,6 +818,7 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
     let messages = messageContext;
     let currentPresetId;
     let payload;
+    let aiMsgElement; 
 
     if (!isRegenerate) {
         if (!text && uploadedFiles.length === 0) return;
@@ -844,8 +848,22 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
     
     isRequesting = true; document.getElementById('sendBtn').disabled = true;
     
+    // Get the ID string first
     const aiMsgId = appendUI(null, "ai", "", [], true); 
-    const aiContentDiv = document.querySelector(`#${aiMsgId} .message-content`);
+    
+    // 立即获取元素引用，以避免在流结束时因 ID 被删除而导致的空指针错误
+    aiMsgElement = document.getElementById(aiMsgId); 
+    const aiContentDiv = aiMsgElement ? aiMsgElement.querySelector('.message-content') : null;
+    const aiMsgBubble = aiMsgElement ? aiMsgElement.querySelector('.message-bubble') : null;
+    
+    if (!aiMsgElement || !aiContentDiv || !aiMsgBubble) {
+        console.error("Critical UI error: Could not find AI message elements after appendUI.");
+        isRequesting = false; 
+        document.getElementById('sendBtn').disabled = false;
+        showToast("UI 渲染失败，请刷新页面。");
+        return; 
+    }
+    
     let aiFullText = "";
 
     try {
@@ -857,7 +875,7 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
                 presetId: currentPresetId, 
                 messages: messages, 
                 useSearch: isSearchEnabled,
-                isRegenerate: isRegenerate // 传递给后端，告知不要重复保存用户消息
+                isRegenerate: isRegenerate 
             })
         });
         
@@ -883,7 +901,6 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
                         const chunk = j.choices?.[0]?.delta?.content || j.content || ""; 
                         if (chunk) { aiFullText += chunk; }
                     } catch (e) {
-                         // 忽略解析错误，继续处理下一个 chunk
                         console.error("SSE JSON Parse Error:", e);
                     }
                 }
@@ -903,15 +920,25 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
         // 最终渲染保护
         try {
             aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
-            addCopyButtons(aiContentDiv); // 在最终渲染后添加复制按钮
+            addCopyButtons(aiContentDiv); 
         } catch (e) {
             aiContentDiv.innerText = aiFullText;
         }
 
-        // 重新设置消息 ID，并添加元数据/按钮
-        document.getElementById(aiMsgId).id = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        document.querySelector(`#${aiMsgId} .message-bubble`).insertAdjacentHTML('beforeend', `<div class="msg-meta">${formatTime(Date.now())}</div>`);
+        // --- 修复关键：使用引用插入 meta 和按钮 ---
+        // 插入元数据
+        aiMsgBubble.insertAdjacentHTML('beforeend', `<div class="msg-meta">${formatTime(Date.now())}</div>`);
         
+        // 插入重新生成按钮
+        aiMsgBubble.insertAdjacentHTML('beforeend', `
+            <div class="regenerate-action" style="margin-top:8px; text-align:right;">
+                <button class="icon-btn" onclick="regenerateResponse('${aiMsgId}')" style="color:var(--primary-color); background:rgba(0,0,0,0.05); padding:4px 10px; border-radius:6px; font-size:12px;">
+                    <i data-lucide="rotate-ccw" style="width:14px; margin-right:4px;"></i> 重新生成
+                </button>
+            </div>
+        `);
+        lucide.createIcons({ root: aiMsgBubble });
+
         // 刷新会话列表并更新 Token 显示
         fetchSessions();
         const updatedSessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
@@ -920,16 +947,20 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
         updateTokenDisplay(updatedTokens);
 
     } catch (e) { 
-        aiContentDiv.innerHTML += `<br><span style="color:var(--danger-color)">Error: ${e.message}</span>`;
-        // 在错误消息后添加重新生成按钮
-        aiContentDiv.parentElement.insertAdjacentHTML('beforeend', `
+        // --- 修复关键：使用引用插入错误提示和按钮 ---
+        const errorMsgHtml = `<br><span style="color:var(--danger-color)">Error: ${e.message}</span>`;
+        // 如果 aiContentDiv 已经被流式渲染填充，则追加错误信息
+        aiContentDiv.innerHTML += errorMsgHtml;
+        
+        // 插入重新生成按钮
+        aiMsgBubble.insertAdjacentHTML('beforeend', `
             <div class="regenerate-action" style="margin-top:8px; text-align:right;">
-                <button class="icon-btn" onclick="regenerateResponse('${aiMsgId}')" style="color:var(--primary-color); background:rgba(0,0,0,0.05);">
-                    <i data-lucide="rotate-ccw" style="width:14px;"></i> 重新生成
+                <button class="icon-btn" onclick="regenerateResponse('${aiMsgId}')" style="color:var(--primary-color); background:rgba(0,0,0,0.05); padding:4px 10px; border-radius:6px; font-size:12px;">
+                    <i data-lucide="rotate-ccw" style="width:14px; margin-right:4px;"></i> 重新生成
                 </button>
             </div>
         `);
-        lucide.createIcons({ root: aiContentDiv.parentElement });
+        lucide.createIcons({ root: aiMsgBubble }); // Refresh icons in the bubble
     } finally { 
         isRequesting = false; 
         document.getElementById('sendBtn').disabled = false; 
@@ -954,8 +985,10 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     const box = document.getElementById('chat-box');
     const div = document.createElement('div');
     div.className = `message-row ${role === 'user' ? 'user' : 'ai'}`;
-    const messageId = id || ('msg-' + Date.now());
-    div.id = messageId;
+    
+    // 使用时间戳和随机数生成唯一的 ID，用于流式渲染和重新生成追踪
+    const messageId = id || (role === 'ai' ? `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}` : null);
+    if (messageId) div.id = messageId;
     
     let avatarHtml = '';
     if (role === 'user') {
@@ -972,7 +1005,6 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     }
 
     let cHtml = '';
-    let additionalContent = '';
     
     if (role === 'user') {
         cHtml = images.map(u=>`<img src="${u}">`).join('<br>') + (text ? text.replace(/</g, "&lt;") : '');
@@ -981,26 +1013,18 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
             cHtml = '<span style="color:var(--text-secondary)">Thinking...</span>';
         } else {
             try {
+                // 安全渲染，防止 marked 报错阻塞 UI
                 cHtml = DOMPurify.sanitize(marked.parse(text));
-                addCopyButtons(cHtml); // 在最终渲染前预处理代码块
+                // addCopyButtons(cHtml); // 不在这里调用，交给 sendMessage 最终调用
             } catch (e) {
                 console.error("Marked parse error:", e);
-                cHtml = text.replace(/</g, "&lt;");
-            }
-            // 非加载状态下，添加重新生成按钮
-            if (!isLoading) {
-                additionalContent = `
-                    <div class="regenerate-action" style="margin-top:8px; text-align:right;">
-                        <button class="icon-btn" onclick="regenerateResponse('${messageId}')" style="color:var(--primary-color); background:rgba(0,0,0,0.05); padding:4px 8px; border-radius:6px; font-size:12px;">
-                            <i data-lucide="rotate-ccw" style="width:14px; margin-right:4px;"></i> 重新生成
-                        </button>
-                    </div>
-                `;
+                cHtml = text.replace(/</g, "&lt;"); // 降级为纯文本
             }
         }
     }
     
-    div.innerHTML = `<div class="avatar ${role==='user'?'user-avatar':'ai-avatar'}">${avatarHtml}</div><div class="message-bubble"><div class="message-content">${cHtml}</div>${(timestamp&&!isLoading)?`<div class="msg-meta">${formatTime(timestamp)}</div>`:''}${role==='ai'?additionalContent:''}</div>`;
+    // 渲染 AI 消息时，只包含内容和头像，元数据和重新生成按钮由 sendMessage 负责追加
+    div.innerHTML = `<div class="avatar ${role==='user'?'user-avatar':'ai-avatar'}">${avatarHtml}</div><div class="message-bubble"><div class="message-content">${cHtml}</div>${(timestamp&&!isLoading)?`<div class="msg-meta">${formatTime(timestamp)}</div>`:''}</div>`;
     box.appendChild(div); box.scrollTop = box.scrollHeight; lucide.createIcons({ root: div });
     return messageId;
 }
@@ -1021,9 +1045,6 @@ function addCopyButtons(element) {
         // 复制按钮已在 marked.js 的 renderer.code 中添加，这里只需确保 lucide 图标被创建
         lucide.createIcons({ root: pre });
     });
-
-    // 查找所有行内代码 <code>，为需要复制的指令添加按钮 (可选，目前只处理代码块)
-    // 如果要为所有行内代码添加复制按钮，需要更复杂的逻辑，目前保持仅处理代码块
 
     // 如果传入的是临时 div，返回其内部 HTML 字符串
     if (element.id !== 'chat-box' && !element.classList.contains('message-content')) {
