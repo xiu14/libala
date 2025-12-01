@@ -5,9 +5,27 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = fs.promises;
 const sqlite3 = require('sqlite3').verbose();
-const app = express();
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const crypto = require('crypto');
 
+const app = express();
 const PORT = process.env.PORT || 3000;
+
+// --- 0. R2 对象存储配置 ---
+// 请确保在环境变量中配置了 R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_DOMAIN
+// 如果没有配置 R2，代码会自动降级回不上传
+const hasR2Config = process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_DOMAIN;
+
+const r2Client = hasR2Config ? new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+}) : null;
+
+const R2_DOMAIN = process.env.R2_DOMAIN; 
 
 // --- 1. 动态账号配置 ---
 const USERS = {};
@@ -25,13 +43,13 @@ const DATA_DIR = '/app/data';
 const DB_FILE = path.join(DATA_DIR, 'chat.db'); 
 const OLD_DB_FILE = path.join(DATA_DIR, 'database.json');
 
-// --- 默认预设：新增置顶的黎吧啦预设，使用 libala_main ID进行置顶 ---
+// --- 默认预设 ---
 const DEFAULT_PRESETS = [
     { 
-        id: 'libala_main', // 专用的ID用于前端置顶
+        id: 'libala_main', 
         name: '✨ 左耳 - 黎吧啦', 
         desc: '倾听你的心声，用我的方式解析世界。', 
-        url: "https://whu.zeabur.app", // 假设使用默认的 Gemini 模型 API
+        url: "https://whu.zeabur.app", 
         key: "pwd", 
         modelId: "gemini-3-pro-preview", 
         icon: "💜",
@@ -74,9 +92,7 @@ function initDB() {
         db = new sqlite3.Database(DB_FILE, async (err) => {
             if (err) return reject(err);
             db.serialize(() => {
-                // 预设表修改：新增 system_prompt 字段
                 db.run(`CREATE TABLE IF NOT EXISTS presets (id TEXT PRIMARY KEY, name TEXT, desc TEXT, url TEXT, key TEXT, modelId TEXT, icon TEXT, system_prompt TEXT)`);
-                
                 db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT, title TEXT, mode TEXT, created_at INTEGER, updated_at INTEGER)`);
                 db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE)`);
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
@@ -127,7 +143,6 @@ async function checkAndMigrateData(force = false) {
         db.serialize(() => {
             db.run("BEGIN TRANSACTION");
             if (oldData.presets) {
-                // 处理旧数据迁移，新增 system_prompt 字段
                 const stmt = db.prepare("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                 oldData.presets.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon || '⚡', p.system_prompt || null));
                 stmt.finalize();
@@ -155,12 +170,73 @@ async function checkAndMigrateData(force = false) {
 async function checkDefaultPresets() {
     const c = await dbGet("SELECT count(*) as c FROM presets");
     if (c.c === 0) {
-        // 插入 DEFAULT_PRESETS 时，包含 system_prompt
         const stmt = db.prepare("INSERT INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         DEFAULT_PRESETS.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon, p.system_prompt));
         stmt.finalize();
     }
 }
+
+// --- R2 上传逻辑 ---
+async function uploadToR2(base64Data) {
+    if (!hasR2Config) return null;
+
+    try {
+        // 1. 解析 Base64
+        const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (!matches || matches.length !== 3) return null;
+
+        const mimeType = matches[1];
+        const buffer = Buffer.from(matches[2], 'base64');
+        
+        // 2. 生成文件名
+        const ext = mimeType.split('/')[1] || 'bin';
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '/'); // year/month/day
+        const filename = `${dateStr}/${crypto.randomUUID()}.${ext}`;
+
+        // 3. 上传到 R2
+        const command = new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME || 'libala-chat', 
+            Key: filename,
+            Body: buffer,
+            ContentType: mimeType
+        });
+
+        await r2Client.send(command);
+
+        // 4. 返回完整 URL
+        return `https://${R2_DOMAIN}/${filename}`;
+    } catch (e) {
+        console.error("R2 Upload Error:", e);
+        return null;
+    }
+}
+
+// 处理消息数组：将 Base64 转换为 R2 链接
+async function processMessagesForR2(messages) {
+    if (!hasR2Config) return messages;
+
+    const newMessages = JSON.parse(JSON.stringify(messages)); // 深拷贝
+    let modified = false;
+
+    const processContentItem = async (item) => {
+        if (item.type === 'image_url' && item.image_url && item.image_url.url && item.image_url.url.startsWith('data:')) {
+            const r2Url = await uploadToR2(item.image_url.url);
+            if (r2Url) {
+                console.log(`[R2] Image uploaded: ${r2Url}`);
+                item.image_url.url = r2Url;
+                modified = true;
+            }
+        }
+    };
+
+    for (const msg of newMessages) {
+        if (Array.isArray(msg.content)) {
+            await Promise.all(msg.content.map(processContentItem));
+        }
+    }
+    return newMessages; // 即使没有修改，也返回深拷贝的对象
+}
+
 
 // --- Google Search ---
 async function searchGoogle(query) {
@@ -183,14 +259,14 @@ async function searchGoogle(query) {
 // --- API ---
 const tokenMap = new Map();
 
-// 获取系统状态 (是否需要邀请码)
+// 获取系统状态
 app.get('/api/system/status', async (req, res) => {
     const config = await dbGet("SELECT value FROM system_config WHERE key = 'invite_required'");
     const inviteRequired = config ? config.value === 'true' : false;
     res.json({ success: true, inviteRequired });
 });
 
-// 注册接口 (集成邀请码逻辑)
+// 注册
 app.post('/api/register', async (req, res) => {
     const { username, password, inviteCode } = req.body;
     if (!username || !password) return res.json({ success: false, message: "账号或密码不能为空" });
@@ -226,7 +302,7 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
-// 登录接口
+// 登录
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     const userRow = await dbGet("SELECT * FROM users WHERE username = ? AND password = ?", [username, password]);
@@ -269,14 +345,11 @@ app.post('/api/admin/invite/generate', async (req, res) => {
     res.json({ success: true, code });
 });
 
-// 配置信息 (包含 system_prompt)
 app.get('/api/config', async (req, res) => {
-    // 查询 presets 时包含 system_prompt 字段
     const presets = await dbAll("SELECT id, name, desc, icon, system_prompt FROM presets");
     res.json({ success: true, presets });
 });
 
-// 会话列表
 app.get('/api/sessions', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
@@ -284,7 +357,6 @@ app.get('/api/sessions', async (req, res) => {
     res.json({ success: true, data: sessions });
 });
 
-// 会话详情
 app.get('/api/session/:id', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
@@ -353,7 +425,6 @@ app.get('/api/announcement', async (req, res) => {
     res.json({ success: true, data: ann });
 });
 
-// 所有历史公告 (面向所有用户)
 app.get('/api/announcements/history', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ success: false });
@@ -385,47 +456,43 @@ app.post('/api/admin/announcement/delete', async (req, res) => {
     res.json({ success: true });
 });
 
-// --- Chat (处理 system_prompt 注入) ---
+// --- Chat (自动处理新图片的 R2 上传) ---
 app.post('/api/chat', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ error: { message: "登录已过期" } });
-    const { sessionId, presetId, messages, useSearch } = req.body;
+    
+    let { sessionId, presetId, messages, useSearch } = req.body;
     const now = Date.now();
 
     try {
-        // 1. 获取预设，包含新的 system_prompt 字段
         const preset = await dbGet("SELECT * FROM presets WHERE id=?", [presetId]);
         if (!preset) return res.status(400).json({ error: { message: "无此模型" } });
 
+        // 处理 R2 上传：只处理最后一条用户消息
         const lastMsg = messages[messages.length-1];
         if (lastMsg && lastMsg.role === 'user') {
+            const processedMsgs = await processMessagesForR2([lastMsg]); 
+            const msgToSave = processedMsgs[0];
+
             await dbRun("INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)", 
-                [sessionId, 'user', typeof lastMsg.content==='string'?lastMsg.content:JSON.stringify(lastMsg.content), now]);
+                [sessionId, 'user', typeof msgToSave.content==='string' ? msgToSave.content : JSON.stringify(msgToSave.content), now]);
+            
             await dbRun("UPDATE sessions SET updated_at=? WHERE id=?", [now, sessionId]);
+            messages[messages.length-1] = msgToSave; // 更新内存中的消息用于发送给AI
         }
 
         let finalMsgs = [...messages];
+        if (preset.system_prompt) finalMsgs.unshift({ role: 'system', content: preset.system_prompt });
         
-        // 2. 注入 system_prompt (如果有)
-        if (preset.system_prompt) {
-             finalMsgs.unshift({ role: 'system', content: preset.system_prompt });
-        }
-        
-        // 3. 注入当前北京时间 (放在所有消息的最前面)
         const bjTime = getBeijingTime();
-        const timeContext = { role: 'system', content: `当前北京时间: ${bjTime.desc}。` };
-        finalMsgs.unshift(timeContext); 
+        finalMsgs.unshift({ role: 'system', content: `当前北京时间: ${bjTime.desc}。` }); 
 
         if (useSearch && lastMsg && lastMsg.role === 'user') {
             let q = typeof lastMsg.content === 'string' ? lastMsg.content : lastMsg.content.find(c=>c.type==='text')?.text;
             if (q) {
                 const sRes = await searchGoogle(q);
                 if (sRes) {
-                    // 注入搜索结果到用户消息之前
-                    finalMsgs.splice(finalMsgs.length-1, 0, { 
-                        role: 'system', 
-                        content: `[联网搜索结果]:\n${sRes}\n请结合上述搜索结果回答用户问题。` 
-                    });
+                    finalMsgs.splice(finalMsgs.length-1, 0, { role: 'system', content: `[联网搜索结果]:\n${sRes}\n请结合上述搜索结果回答用户问题。` });
                 }
             }
         }
@@ -443,21 +510,14 @@ app.post('/api/chat', async (req, res) => {
 
         if (!apiRes.ok) { res.write(`data: ${JSON.stringify({ error: await apiRes.json() })}\n\n`); return res.end(); }
 
-        let fullText = "", buffer = "";
+        let fullText = "";
         apiRes.body.on('data', chunk => {
-            buffer += chunk.toString();
-            let idx;
-            while ((idx = buffer.indexOf('\n')) >= 0) {
-                const line = buffer.slice(0, idx).trim();
-                buffer = buffer.slice(idx + 1);
+            const lines = chunk.toString().split('\n');
+            for(const line of lines) {
                 if (line.startsWith('data: ')) {
-                    const d = line.slice(6);
+                    const d = line.slice(6).trim();
                     if (d === '[DONE]') continue;
-                    try {
-                        const j = JSON.parse(d);
-                        const c = j.choices?.[0]?.delta?.content || j.content || "";
-                        if (c) { fullText += c; res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}\n\n`); }
-                    } catch {}
+                    try { const j = JSON.parse(d); const c = j.choices?.[0]?.delta?.content || j.content || ""; if (c) { fullText += c; res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}\n\n`); } } catch {}
                 }
             }
         });
@@ -477,7 +537,6 @@ app.post('/api/chat', async (req, res) => {
 app.get('/api/admin/data', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-    // 查询 presets 时包含 system_prompt 字段
     const presets = await dbAll("SELECT * FROM presets");
     const uRows = await dbAll("SELECT * FROM usage");
     const usage = {};
@@ -488,7 +547,6 @@ app.get('/api/admin/data', async (req, res) => {
 app.post('/api/admin/preset', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-    // 接收并存储 system_prompt 字段
     const { id, name, url, key, modelId, desc, icon, system_prompt } = req.body;
     const fid = id || 'model_' + Date.now();
     await dbRun("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [fid, name, desc, url, key, modelId, icon||'⚡', system_prompt]);
@@ -506,6 +564,63 @@ app.post('/api/admin/migrate', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
     res.json(await checkAndMigrateData(true));
+});
+
+// --- 新增：历史图片迁移接口 ---
+app.post('/api/admin/migrate-images', async (req, res) => {
+    const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
+    if (user !== ADMIN_USER) return res.status(403).json({ success: false, message: "权限不足" });
+    
+    if (!hasR2Config) return res.status(400).json({ success: false, message: "未配置 R2 环境变量" });
+
+    try {
+        console.log("开始扫描历史图片...");
+        // 查找所有包含 'data:image' 的消息
+        const rows = await dbAll("SELECT id, content FROM messages WHERE content LIKE '%data:image%'");
+        let migratedCount = 0;
+
+        for (const row of rows) {
+            try {
+                // 尝试解析 JSON
+                const contentJson = JSON.parse(row.content);
+                if (!Array.isArray(contentJson)) continue;
+
+                let modified = false;
+                
+                // 处理数组中的每个项目
+                const processItem = async (item) => {
+                    if (item.type === 'image_url' && item.image_url && item.image_url.url && item.image_url.url.startsWith('data:')) {
+                        console.log(`正在上传图片 (Msg ID: ${row.id})...`);
+                        const r2Url = await uploadToR2(item.image_url.url);
+                        if (r2Url) {
+                            item.image_url.url = r2Url;
+                            modified = true;
+                        }
+                    }
+                };
+
+                await Promise.all(contentJson.map(processItem));
+
+                if (modified) {
+                    await dbRun("UPDATE messages SET content = ? WHERE id = ?", [JSON.stringify(contentJson), row.id]);
+                    migratedCount++;
+                }
+            } catch (e) {
+                // 如果 content 不是 JSON 或解析失败，跳过
+                continue;
+            }
+        }
+        
+        // 瘦身数据库
+        if (migratedCount > 0) {
+            await dbRun("VACUUM"); 
+        }
+
+        res.json({ success: true, message: `迁移完成，共处理 ${migratedCount} 条包含图片的消息。` });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: "迁移失败: " + e.message });
+    }
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
