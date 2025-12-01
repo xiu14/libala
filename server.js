@@ -11,8 +11,7 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- 0. R2 对象存储配置 (已修复签名问题) ---
-// 必须在 Zeabur 环境变量中配置: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_DOMAIN
+// --- 0. R2 对象存储配置 (终极修复版) ---
 const hasR2Config = process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_DOMAIN;
 
 if (!hasR2Config) {
@@ -21,19 +20,34 @@ if (!hasR2Config) {
     console.log("提示: R2 对象存储已启用。");
 }
 
-const r2Client = hasR2Config ? new S3Client({
-    // 关键修复 1: R2 必须使用 us-east-1 区域以兼容 AWS SDK 签名
-    region: 'us-east-1', 
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
-    // 关键修复 2: 禁用 SDK 自动计算 Checksum，防止 R2 签名不匹配 (SignatureDoesNotMatch)
-    requestChecksumCalculation: "WHEN_REQUIRED",
-    responseChecksumValidation: "WHEN_REQUIRED",
-    forcePathStyle: true 
-}) : null;
+let r2Client = null;
+if (hasR2Config) {
+    r2Client = new S3Client({
+        region: 'us-east-1', // R2 必须用这个 Region
+        endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        },
+        forcePathStyle: true,
+        // 禁用 SDK 的自动校验计算
+        requestChecksumCalculation: "WHEN_REQUIRED",
+        responseChecksumValidation: "WHEN_REQUIRED",
+    });
+
+    // --- 核心修复：添加中间件强制移除 CRC32 头 ---
+    // R2 目前对 AWS SDK v3 的 CRC32 校验头支持有问题，会导致 SignatureDoesNotMatch
+    r2Client.middlewareStack.add(
+        (next, context) => async (args) => {
+            if (args.request.headers) {
+                delete args.request.headers["x-amz-sdk-checksum-algorithm"];
+                delete args.request.headers["x-amz-checksum-crc32"];
+            }
+            return next(args);
+        },
+        { step: "build", priority: "high", name: "removeChecksumHeader" }
+    );
+}
 
 const R2_DOMAIN = process.env.R2_DOMAIN; 
 
@@ -47,10 +61,8 @@ for (const key in process.env) {
 const ADMIN_USER = process.env.ADMIN_USER || "libala";
 
 // --- 2. 数据存储 ---
-// Zeabur 等容器环境建议使用 /app/data
 const DATA_DIR = '/app/data'; 
 const LOCAL_DATA_DIR = path.join(__dirname, 'data');
-// 自动判断环境
 const DB_DIR = fs.existsSync('/app') ? DATA_DIR : LOCAL_DATA_DIR;
 const DB_FILE = path.join(DB_DIR, 'chat.db'); 
 const OLD_DB_FILE = path.join(DB_DIR, 'database.json');
@@ -199,21 +211,21 @@ async function uploadToR2(base64Data) {
     if (!hasR2Config) return null;
 
     try {
-        // 1. 解析 Base64
         const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (!matches || matches.length !== 3) return null;
 
         const mimeType = matches[1];
         const buffer = Buffer.from(matches[2], 'base64');
         
-        // 2. 生成文件名
         const ext = mimeType.split('/')[1] || 'bin';
-        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '/'); // year/month/day
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '/'); 
         const filename = `${dateStr}/${crypto.randomUUID()}.${ext}`;
 
-        // 3. 上传到 R2
+        // 优先使用环境变量中的 Bucket Name
+        const bucketName = process.env.R2_BUCKET_NAME || 'libala-chat';
+
         const command = new PutObjectCommand({
-            Bucket: process.env.R2_BUCKET_NAME || 'libala-chat', 
+            Bucket: bucketName,
             Key: filename,
             Body: buffer,
             ContentType: mimeType
@@ -221,10 +233,13 @@ async function uploadToR2(base64Data) {
 
         await r2Client.send(command);
 
-        // 4. 返回完整 URL
         return `https://${R2_DOMAIN}/${filename}`;
     } catch (e) {
         console.error("R2 Upload Error:", e);
+        // 如果是签名错误，打印详细信息以便调试，但不要中断进程
+        if (e.name === 'SignatureDoesNotMatch') {
+            console.error("签名不匹配。请检查：1. 环境变量有无空格 2. 桶名称是否正确");
+        }
         return null;
     }
 }
