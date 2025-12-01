@@ -662,6 +662,8 @@ async function fetchSessions() {
         document.getElementById('sessionCount').innerText = `${json.data.length}`;
         const groups = { '今天': [], '昨天': [], '7天内': [], '更早': [] };
         json.data.forEach(s => {
+            const p = PRESETS.find(x => x.id === s.mode);
+            // ... (rest of session grouping logic is unchanged)
             const d = new Date(s.updated_at), now = new Date(), diff = now - d, oneDay = 86400000;
             let label = '更早';
             if (d.toDateString() === now.toDateString()) label = '今天';
@@ -787,8 +789,6 @@ async function regenerateResponse(msgId) {
         let messages = sessData.messages.map(m => ({ role: m.role, content: m.content }));
         currentPresetId = sessData.session.mode;
         
-        // --- 修复上下文检查逻辑 ---
-        
         // 检查历史记录是否足够长 (至少需要 User 和 AI 两条)
         if (messages.length < 2) {
             showToast("无法进行重新生成，上下文不足。");
@@ -845,6 +845,8 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
     let messages = messageContext;
     let currentPresetId;
     let payload;
+    let aiMsgElement; 
+    let aiMsgId;
 
     if (!isRegenerate) {
         if (!text && uploadedFiles.length === 0) return;
@@ -867,21 +869,24 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
         input.value = ''; uploadedFiles = []; renderPreviews(); autoResize(input);
 
     } else {
-        // 重新生成模式：messages 已经被传入，不需要重新构建 payload 或清空输入框
+        // 重新生成模式：messages 已经被传入
         if (!messages) return;
         currentPresetId = presetIdOverride;
     }
     
     isRequesting = true; document.getElementById('sendBtn').disabled = true;
     
-    // Get the ID string first
-    const aiMsgId = appendUI(null, "ai", "", [], true); 
+    // --- 关键修复：直接获取元素引用 ---
+    // appendUI 现在返回 DOM 元素本身
+    const appendResult = appendUI(null, "ai", "", [], true);
+    aiMsgElement = appendResult.element; 
+    aiMsgId = appendResult.id;
+
+    // 立即获取元素引用，避免竞态条件
+    const aiContentDiv = aiMsgElement.querySelector('.message-content');
+    const aiMsgBubble = aiMsgElement.querySelector('.message-bubble');
     
-    // 立即获取元素引用，以避免在流结束时因 ID 被删除而导致的空指针错误
-    const aiMsgElement = document.getElementById(aiMsgId); 
-    const aiContentDiv = aiMsgElement ? aiMsgElement.querySelector('.message-content') : null;
-    const aiMsgBubble = aiMsgElement ? aiMsgElement.querySelector('.message-bubble') : null;
-    
+    // 再次确认元素存在
     if (!aiMsgElement || !aiContentDiv || !aiMsgBubble) {
         console.error("Critical UI error: Could not find AI message elements after appendUI.");
         isRequesting = false; 
@@ -907,7 +912,7 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
         
         if (!res.ok) { 
             const errorJson = await res.json().catch(() => ({ error: { message: res.statusText || "未知 API 错误" } }));
-            throw new Error(`API 错误: ${errorJson.error.message || res.statusText}`); 
+            throw new Error(`API 错误: ${errorJson.error.message || errorJson.error.error || res.statusText}`); 
         }
 
         const reader = res.body.getReader();
@@ -975,7 +980,6 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
     } catch (e) { 
         // --- 失败时，插入错误提示和按钮 ---
         const errorMsgHtml = `<br><span style="color:var(--danger-color)">Error: ${e.message}</span>`;
-        // 如果 aiContentDiv 已经被流式渲染填充，则追加错误信息
         aiContentDiv.innerHTML += errorMsgHtml;
         
         aiMsgBubble.insertAdjacentHTML('beforeend', `
@@ -985,7 +989,7 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
                 </button>
             </div>
         `);
-        lucide.createIcons({ root: aiMsgBubble }); // Refresh icons in the bubble
+        lucide.createIcons({ root: aiMsgBubble }); 
     } finally { 
         isRequesting = false; 
         document.getElementById('sendBtn').disabled = false; 
@@ -1002,7 +1006,7 @@ function formatTime(ts) { const d = new Date(ts); return `${String(d.getHours())
  * @param {Array<string>} images - 图片 URL 数组。
  * @param {boolean} isLoading - 是否为加载状态。
  * @param {number | null} timestamp - 时间戳。
- * @returns {string} 消息的 DOM ID。
+ * @returns {{id: string | null, element: HTMLElement}} 返回新创建的 DOM 元素和它的 ID。
  */
 function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     const empty = document.getElementById('emptyState');
@@ -1011,7 +1015,7 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     const div = document.createElement('div');
     div.className = `message-row ${role === 'user' ? 'user' : 'ai'}`;
     
-    // 使用时间戳和随机数生成唯一的 ID，用于流式渲染和重新生成追踪
+    // 生成 ID (只对 AI 消息生成，用于追踪)
     const messageId = id || (role === 'assistant' ? `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}` : null);
     if (messageId) div.id = messageId;
     
@@ -1050,7 +1054,9 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     // 渲染 AI 消息时，只包含内容和头像，元数据和重新生成按钮由 sendMessage 负责追加
     div.innerHTML = `<div class="avatar ${role==='user'?'user-avatar':'ai-avatar'}">${avatarHtml}</div><div class="message-bubble"><div class="message-content">${cHtml}</div>${(timestamp&&!isLoading)?`<div class="msg-meta">${formatTime(timestamp)}</div>`:''}</div>`;
     box.appendChild(div); box.scrollTop = box.scrollHeight; lucide.createIcons({ root: div });
-    return messageId;
+    
+    // 关键修复：返回创建的 DOM 元素和 ID
+    return { id: messageId, element: div };
 }
 
 /**
