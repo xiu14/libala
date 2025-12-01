@@ -5,6 +5,7 @@ let isSearchEnabled = false;
 // 注册模式状态
 let isRegisterMode = false;
 
+// 配置 marked (适配 v4.3.0)
 marked.setOptions({ highlight: (c,l) => highlight.highlight(c, {language: highlight.getLanguage(l)?l:'plaintext'}).value, breaks: true, gfm: true });
 
 window.onload = function() {
@@ -594,11 +595,28 @@ async function sendMessage() {
                     try { const j = JSON.parse(d); aiFullText += (j.choices?.[0]?.delta?.content || j.content || ""); } catch {}
                 }
             }
-            aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+            
+            // --- 关键修复 1: 增加 try-catch 渲染保护 ---
+            try {
+                aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+            } catch (err) {
+                // 如果 marked 崩溃，直接显示纯文本
+                aiContentDiv.innerText = aiFullText;
+            }
+            // ----------------------------------------
+
             const box = document.getElementById('chat-box');
             if(box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
         }
-        aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+        
+        // --- 关键修复 2: 最终渲染保护 ---
+        try {
+            aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+        } catch (e) {
+            aiContentDiv.innerText = aiFullText;
+        }
+        // ----------------------------------------
+        
         document.querySelector(`#${aiMsgId} .message-bubble`).insertAdjacentHTML('beforeend', `<div class="msg-meta">${formatTime(Date.now())}</div>`);
         fetchSessions();
     } catch (e) { aiContentDiv.innerHTML += `<br><span style="color:var(--danger-color)">Error: ${e.message}</span>`; } 
@@ -629,7 +647,23 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
         }
     }
 
-    let cHtml = role==='user' ? (images.map(u=>`<img src="${u}"><br>`).join('') + text.replace(/</g, "&lt;")) : (isLoading ? '<span style="color:var(--text-secondary)">Thinking...</span>' : DOMPurify.sanitize(marked.parse(text)));
+    // 这里需要注意，如果是初始化渲染历史记录时 (isLoading=false)，也会调用 marked
+    // 建议对这里的渲染也做简单保护（可选，但推荐）
+    let cHtml = '';
+    if (role === 'user') {
+        cHtml = images.map(u=>`<img src="${u}"><br>`).join('') + text.replace(/</g, "&lt;");
+    } else {
+        if (isLoading) {
+            cHtml = '<span style="color:var(--text-secondary)">Thinking...</span>';
+        } else {
+            try {
+                cHtml = DOMPurify.sanitize(marked.parse(text));
+            } catch (e) {
+                cHtml = text; // 降级处理
+            }
+        }
+    }
+    
     div.innerHTML = `<div class="avatar ${role==='user'?'user-avatar':'ai-avatar'}">${avatarHtml}</div><div class="message-bubble"><div class="message-content">${cHtml}</div>${(timestamp&&!isLoading)?`<div class="msg-meta">${formatTime(timestamp)}</div>`:''}</div>`;
     box.appendChild(div); box.scrollTop = box.scrollHeight; lucide.createIcons({ root: div });
     return div.id;
