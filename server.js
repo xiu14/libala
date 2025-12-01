@@ -36,7 +36,6 @@ if (hasR2Config) {
     });
 
     // --- 核心修复：添加中间件强制移除 CRC32 头 ---
-    // R2 目前对 AWS SDK v3 的 CRC32 校验头支持有问题，会导致 SignatureDoesNotMatch
     r2Client.middlewareStack.add(
         (next, context) => async (args) => {
             if (args.request.headers) {
@@ -67,7 +66,7 @@ const DB_DIR = fs.existsSync('/app') ? DATA_DIR : LOCAL_DATA_DIR;
 const DB_FILE = path.join(DB_DIR, 'chat.db'); 
 const OLD_DB_FILE = path.join(DB_DIR, 'database.json');
 
-// --- 默认预设 ---
+// --- 默认预设 (新增 context_length 字段) ---
 const DEFAULT_PRESETS = [
     { 
         id: 'libala_main', 
@@ -75,12 +74,13 @@ const DEFAULT_PRESETS = [
         desc: '倾听你的心声，用我的方式解析世界。', 
         url: "https://whu.zeabur.app", 
         key: "pwd", 
-        modelId: "gemini-3-pro-preview", 
+        modelId: "gemini-2.5-pro-preview", 
         icon: "💜",
+        context_length: 128000,
         system_prompt: "你现在扮演黎吧啦，一个内心充满故事、敢爱敢恨的角色。你的对话风格要直接、略带叛逆，但充满真诚。你对《左耳》的剧情和人物了如指掌，并能引用经典台词。请以'左耳'的意境与用户交流，保持这种强烈的角色感。"
     },
-    { id: 'gemini', name: 'Gemini', desc: '3 Pro (Preview)', url: "https://whu.zeabur.app", key: "pwd", modelId: "gemini-3-pro-preview", icon: "💎", system_prompt: null },
-    { id: 'gpt', name: 'GPT', desc: '4.1 Mini', url: "https://x666.me", key: "sk-Pgj1iaG2ZvdKOxxrVHrvTio6vtKUGVOZbUgdUdqvFxp9RQow", modelId: "gpt-4.1-mini", icon: "🤖", system_prompt: null }
+    { id: 'gemini', name: 'Gemini', desc: 'Pro Vision', url: "https://whu.zeabur.app", key: "pwd", modelId: "gemini-2.5-pro-preview", icon: "💎", context_length: 128000, system_prompt: null },
+    { id: 'gpt', name: 'GPT', desc: '4.0 Mini', url: "https://x666.me", key: "sk-Pgj1iaG2ZvdKOxxrVHrvTio6vtKUGVOZbUgdUdqvFxp9RQow", modelId: "gpt-4o-mini", icon: "🤖", context_length: 128000, system_prompt: null }
 ];
 
 app.use(express.json({ limit: '50mb' }));
@@ -122,7 +122,14 @@ function initDB() {
             if (err) return reject(err);
             console.log(`Database connected: ${DB_FILE}`);
             db.serialize(() => {
-                db.run(`CREATE TABLE IF NOT EXISTS presets (id TEXT PRIMARY KEY, name TEXT, desc TEXT, url TEXT, key TEXT, modelId TEXT, icon TEXT, system_prompt TEXT)`);
+                // 升级表结构：增加 context_length
+                db.run(`CREATE TABLE IF NOT EXISTS presets (id TEXT PRIMARY KEY, name TEXT, desc TEXT, url TEXT, key TEXT, modelId TEXT, icon TEXT, system_prompt TEXT, context_length INTEGER)`);
+                
+                // 尝试为旧表添加新字段 (如果已存在会忽略错误)
+                db.run("ALTER TABLE presets ADD COLUMN context_length INTEGER", (err) => {
+                    // 忽略 "duplicate column name" 错误
+                });
+
                 db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT, title TEXT, mode TEXT, created_at INTEGER, updated_at INTEGER)`);
                 db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE)`);
                 db.run(`CREATE TABLE IF NOT EXISTS usage (user TEXT, model_id TEXT, count INTEGER, PRIMARY KEY (user, model_id))`);
@@ -173,8 +180,8 @@ async function checkAndMigrateData(force = false) {
         db.serialize(() => {
             db.run("BEGIN TRANSACTION");
             if (oldData.presets) {
-                const stmt = db.prepare("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                oldData.presets.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon || '⚡', p.system_prompt || null));
+                const stmt = db.prepare("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt, context_length) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                oldData.presets.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon || '⚡', p.system_prompt || null, p.context_length || 100000));
                 stmt.finalize();
             }
             if (oldData.chats) {
@@ -200,12 +207,11 @@ async function checkAndMigrateData(force = false) {
 async function checkDefaultPresets() {
     const c = await dbGet("SELECT count(*) as c FROM presets");
     if (c.c === 0) {
-        const stmt = db.prepare("INSERT INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        DEFAULT_PRESETS.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon, p.system_prompt));
+        const stmt = db.prepare("INSERT INTO presets (id, name, desc, url, key, modelId, icon, system_prompt, context_length) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        DEFAULT_PRESETS.forEach(p => stmt.run(p.id, p.name, p.desc, p.url, p.key, p.modelId, p.icon, p.system_prompt, p.context_length));
         stmt.finalize();
     }
 }
-
 // --- R2 上传逻辑 ---
 async function uploadToR2(base64Data) {
     if (!hasR2Config) return null;
@@ -236,7 +242,6 @@ async function uploadToR2(base64Data) {
         return `https://${R2_DOMAIN}/${filename}`;
     } catch (e) {
         console.error("R2 Upload Error:", e);
-        // 如果是签名错误，打印详细信息以便调试，但不要中断进程
         if (e.name === 'SignatureDoesNotMatch') {
             console.error("签名不匹配。请检查：1. 环境变量有无空格 2. 桶名称是否正确");
         }
@@ -378,8 +383,9 @@ app.post('/api/admin/invite/generate', async (req, res) => {
     res.json({ success: true, code });
 });
 
+// 获取配置（新增返回 context_length）
 app.get('/api/config', async (req, res) => {
-    const presets = await dbAll("SELECT id, name, desc, icon, system_prompt FROM presets");
+    const presets = await dbAll("SELECT id, name, desc, icon, system_prompt, context_length FROM presets");
     res.json({ success: true, presets });
 });
 
@@ -489,21 +495,24 @@ app.post('/api/admin/announcement/delete', async (req, res) => {
     res.json({ success: true });
 });
 
-// --- Chat (自动处理新图片的 R2 上传) ---
+// --- Chat (增加 isRegenerate 逻辑) ---
 app.post('/api/chat', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ error: { message: "登录已过期" } });
     
-    let { sessionId, presetId, messages, useSearch } = req.body;
+    // isRegenerate: 如果为 true，则不保存最后一条用户消息（假设已经存在）
+    let { sessionId, presetId, messages, useSearch, isRegenerate } = req.body;
     const now = Date.now();
 
     try {
         const preset = await dbGet("SELECT * FROM presets WHERE id=?", [presetId]);
         if (!preset) return res.status(400).json({ error: { message: "无此模型" } });
 
-        // 处理 R2 上传：只处理最后一条用户消息
         const lastMsg = messages[messages.length-1];
-        if (lastMsg && lastMsg.role === 'user') {
+        
+        // 只有非重新生成请求，才保存用户消息
+        if (!isRegenerate && lastMsg && lastMsg.role === 'user') {
+            // 处理 R2 上传
             const processedMsgs = await processMessagesForR2([lastMsg]); 
             const msgToSave = processedMsgs[0];
 
@@ -511,7 +520,11 @@ app.post('/api/chat', async (req, res) => {
                 [sessionId, 'user', typeof msgToSave.content==='string' ? msgToSave.content : JSON.stringify(msgToSave.content), now]);
             
             await dbRun("UPDATE sessions SET updated_at=? WHERE id=?", [now, sessionId]);
-            messages[messages.length-1] = msgToSave; // 更新内存中的消息用于发送给AI
+            messages[messages.length-1] = msgToSave; 
+        } else if (isRegenerate) {
+            // 如果是重新生成，仅更新会话时间，不插入 User 消息
+            await dbRun("UPDATE sessions SET updated_at=? WHERE id=?", [now, sessionId]);
+            // 注意：这里我们假设前端已经把上下文（不包含旧的错误回复）发过来了
         }
 
         let finalMsgs = [...messages];
@@ -560,6 +573,8 @@ app.post('/api/chat', async (req, res) => {
                 const u = await dbGet("SELECT * FROM usage WHERE user=? AND model_id=?", [user, presetId]);
                 if (u) await dbRun("UPDATE usage SET count=count+1 WHERE user=? AND model_id=?", [user, presetId]);
                 else await dbRun("INSERT INTO usage (user, model_id, count) VALUES (?, ?, 1)", [user, presetId]);
+                
+                // 无论是否是 regenerate，AI 的回复都是新的，都要保存
                 await dbRun("INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)", [sessionId, 'assistant', fullText, Date.now()]);
             }
         });
@@ -577,12 +592,18 @@ app.get('/api/admin/data', async (req, res) => {
     res.json({ success: true, presets, usage });
 });
 
+// 管理员保存预设 (新增 context_length)
 app.post('/api/admin/preset', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
-    const { id, name, url, key, modelId, desc, icon, system_prompt } = req.body;
+    
+    // 确保 context_length 存在，默认 100k
+    const { id, name, url, key, modelId, desc, icon, system_prompt, context_length } = req.body;
+    const ctxLen = context_length ? parseInt(context_length) : 100000;
+
     const fid = id || 'model_' + Date.now();
-    await dbRun("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [fid, name, desc, url, key, modelId, icon||'⚡', system_prompt]);
+    await dbRun("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt, context_length) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+        [fid, name, desc, url, key, modelId, icon||'⚡', system_prompt, ctxLen]);
     res.json({ success: true });
 });
 
@@ -608,19 +629,16 @@ app.post('/api/admin/migrate-images', async (req, res) => {
 
     try {
         console.log("开始扫描历史图片...");
-        // 查找所有包含 'data:image' 的消息
         const rows = await dbAll("SELECT id, content FROM messages WHERE content LIKE '%data:image%'");
         let migratedCount = 0;
 
         for (const row of rows) {
             try {
-                // 尝试解析 JSON
                 const contentJson = JSON.parse(row.content);
                 if (!Array.isArray(contentJson)) continue;
 
                 let modified = false;
                 
-                // 处理数组中的每个项目
                 const processItem = async (item) => {
                     if (item.type === 'image_url' && item.image_url && item.image_url.url && item.image_url.url.startsWith('data:')) {
                         console.log(`正在上传图片 (Msg ID: ${row.id})...`);
@@ -639,12 +657,10 @@ app.post('/api/admin/migrate-images', async (req, res) => {
                     migratedCount++;
                 }
             } catch (e) {
-                // 如果 content 不是 JSON 或解析失败，跳过
                 continue;
             }
         }
         
-        // 瘦身数据库 (释放 Base64 占用的空间)
         if (migratedCount > 0) {
             await dbRun("VACUUM"); 
         }
