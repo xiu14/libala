@@ -141,8 +141,8 @@ async function handleRegister() {
     const confirmVal = document.getElementById('loginPassConfirm').value.trim();
     const inviteVal = document.getElementById('regInviteCode').value.trim(); 
 
-    if (!userVal || !passVal) return alert("代号和暗号都不能少。");
-    if (passVal !== confirmVal) return alert("两次输入的暗号不一致。");
+    if (!userVal || !passVal) return showToast("代号和暗号都不能少。");
+    if (passVal !== confirmVal) return showToast("两次输入的暗号不一致。");
 
     try {
         const btn = document.getElementById('actionBtn');
@@ -161,16 +161,16 @@ async function handleRegister() {
         btn.disabled = false;
 
         if (data.success) {
-            alert(data.message);
+            showToast(data.message);
             toggleRegisterMode();
             document.getElementById('loginUser').value = userVal;
             document.getElementById('loginPass').value = '';
             document.getElementById('loginPass').focus();
         } else {
-            alert(data.message);
+            showToast(data.message);
         }
     } catch(e) { 
-        alert("信号中断，无法连接注册中心。"); 
+        showToast("信号中断，无法连接注册中心。"); 
         document.getElementById('actionBtn').disabled = false;
     }
 }
@@ -180,7 +180,7 @@ async function handleLogin() {
     const userVal = document.getElementById('loginUser').value.trim();
     const passVal = document.getElementById('loginPass').value.trim();
 
-    if (!userVal || !passVal) return alert("请输入账号和密码");
+    if (!userVal || !passVal) return showToast("请输入账号和密码");
 
     try {
         const btn = document.getElementById('actionBtn');
@@ -205,10 +205,10 @@ async function handleLogin() {
             localStorage.setItem('isAdmin', isAdmin);
             initApp();
         } else {
-            alert(data.message || "账号或密码错误");
+            showToast(data.message || "账号或密码错误");
         }
     } catch(e) { 
-        alert("网络错误，请检查连接"); 
+        showToast("网络错误，请检查连接"); 
         document.getElementById('actionBtn').disabled = false;
     }
 }
@@ -320,10 +320,10 @@ function closeAnnouncement() {
 
 async function postAnnouncement() {
     const content = document.getElementById('announceInput').value;
-    if (!content.trim()) return alert("内容不能为空");
+    if (!content.trim()) return showToast("内容不能为空");
     if (!confirm("确定发布？会自动追加当前时间。")) return;
     await fetch('/api/admin/announcement', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ content }) });
-    alert("发布成功"); document.getElementById('announceInput').value = ''; fetchAdminAnnouncements();
+    showToast("发布成功"); document.getElementById('announceInput').value = ''; fetchAdminAnnouncements();
 }
 async function fetchAdminAnnouncements() {
     const res = await fetch('/api/admin/announcement/list', { headers: { 'Authorization': `Bearer ${authToken}` } });
@@ -368,10 +368,10 @@ async function fetchInviteInfo() {
     } catch(e) { console.error(e); }
 }
 async function toggleInviteSystem() {
-    try { const res = await fetch('/api/admin/invite/toggle', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); const data = await res.json(); if (data.success) fetchInviteInfo(); } catch(e) { alert("操作失败"); }
+    try { const res = await fetch('/api/admin/invite/toggle', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); const data = await res.json(); if (data.success) fetchInviteInfo(); } catch(e) { showToast("操作失败"); }
 }
 async function generateInviteCode() {
-    try { const res = await fetch('/api/admin/invite/generate', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); const data = await res.json(); if (data.success) fetchInviteInfo(); } catch(e) { alert("生成失败"); }
+    try { const res = await fetch('/api/admin/invite/generate', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); const data = await res.json(); if (data.success) fetchInviteInfo(); } catch(e) { showToast("生成失败"); }
 }
 function copyText(text) { 
     // 使用 document.execCommand('copy') 作为备用方案
@@ -534,7 +534,7 @@ async function savePreset() {
         // 新增：获取上下文长度
         context_length: document.getElementById('addContextLen').value.trim() 
     };
-    if(!p.name||!p.url||!p.key||!p.modelId) return alert("请填写完整");
+    if(!p.name||!p.url||!p.key||!p.modelId) return showToast("请填写完整");
     
     const scrollContainer = document.querySelector('.admin-body');
     const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
@@ -765,42 +765,69 @@ async function deleteSession(id) {
 async function regenerateResponse(msgId) {
     if (isRequesting || !currentSessionId) return;
 
-    // 1. 从 DOM 中移除旧的 AI 消息
-    const oldAiMsg = document.getElementById(msgId);
-    if (!oldAiMsg) {
-        showToast("无法定位旧消息进行删除，请刷新。");
-        return;
-    }
+    try {
+        // 1. 从 DOM 中移除旧的 AI 消息
+        const oldAiMsg = document.getElementById(msgId);
+        if (!oldAiMsg) {
+            showToast("无法定位旧消息进行删除，请刷新。");
+            return;
+        }
+        
+        // 标记为重新生成，禁用输入
+        isRequesting = true; 
+        document.getElementById('sendBtn').disabled = true;
 
-    // 在移除之前，获取它的前一个兄弟元素（用户消息），并检查它是用户消息
-    const userMsg = oldAiMsg.previousElementSibling;
-    if (!userMsg || !userMsg.classList.contains('user')) {
-         showToast("消息结构错误或上下文不完整，正在重新加载会话...");
-         loadSession(currentSessionId);
-         return;
-    }
-       
-    // 移除旧的 AI 消息
-    oldAiMsg.remove();
-    
+        // 2. 移除旧的 AI 消息 DOM 元素
+        oldAiMsg.remove();
+        
+        // 3. 重新加载会话以获取最新的数据库消息列表
+        const sessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        const sessData = await sessRes.json();
+        
+        let messages = sessData.messages.map(m => ({ role: m.role, content: m.content }));
+        currentPresetId = sessData.session.mode;
+        
+        // --- 修复上下文检查逻辑 ---
+        
+        // 检查历史记录是否足够长 (至少需要 User 和 AI 两条)
+        if (messages.length < 2) {
+            showToast("无法进行重新生成，上下文不足。");
+            loadSession(currentSessionId); 
+            return;
+        }
 
-    // 2. 重新加载会话以获取最新的消息列表
-    const sessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-    const sessData = await sessRes.json();
-    
-    // 3. 构造用于 API 的消息列表
-    const messages = sessData.messages.map(m => ({ role: m.role, content: m.content }));
-    const lastMsg = messages[messages.length - 1];
+        const lastMsg = messages[messages.length - 1];
+        
+        // 确保最后一条消息是 AI 消息（因为是从 DB 拿的完整记录，U-A 成对）
+        if (lastMsg.role !== 'assistant') {
+            showToast("消息结构错误，无法定位用户触发消息。");
+            loadSession(currentSessionId); 
+            return;
+        }
 
-    if (!lastMsg || lastMsg.role !== 'user') {
-        showToast("无法进行重新生成，消息上下文不完整。");
-        loadSession(currentSessionId); // 重新加载会话
-        return;
+        // 移除最后一条 AI 消息（即我们要替换的那条）
+        messages.pop(); 
+        
+        // 移除后，新的最后一条消息应该是用户消息
+        const userMsgToRerun = messages[messages.length - 1];
+        if (userMsgToRerun.role !== 'user') {
+            showToast("消息结构错误，无法定位用户触发消息。");
+            loadSession(currentSessionId); 
+            return;
+        }
+
+        // 4. 发起请求：messages 数组现在以用户消息结束
+        await sendMessage(messages, true, currentPresetId);
+
+    } catch (e) {
+        showToast("重新生成失败：" + e.message);
+        console.error("Regenerate Error:", e);
+        // 发生错误时，重新加载会话以修复可能的 DOM/数据不一致
+        loadSession(currentSessionId); 
+    } finally {
+        isRequesting = false; 
+        document.getElementById('sendBtn').disabled = false;
     }
-    
-    // 4. 发起请求
-    // 注意：我们将完整的消息历史（以用户消息结束）发送给后端，并标记 isRegenerate
-    await sendMessage(messages, true, sessData.session.mode);
 }
 
 
@@ -818,7 +845,6 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
     let messages = messageContext;
     let currentPresetId;
     let payload;
-    let aiMsgElement; 
 
     if (!isRegenerate) {
         if (!text && uploadedFiles.length === 0) return;
@@ -852,7 +878,7 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
     const aiMsgId = appendUI(null, "ai", "", [], true); 
     
     // 立即获取元素引用，以避免在流结束时因 ID 被删除而导致的空指针错误
-    aiMsgElement = document.getElementById(aiMsgId); 
+    const aiMsgElement = document.getElementById(aiMsgId); 
     const aiContentDiv = aiMsgElement ? aiMsgElement.querySelector('.message-content') : null;
     const aiMsgBubble = aiMsgElement ? aiMsgElement.querySelector('.message-bubble') : null;
     
@@ -880,7 +906,7 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
         });
         
         if (!res.ok) { 
-            const errorJson = await res.json();
+            const errorJson = await res.json().catch(() => ({ error: { message: res.statusText || "未知 API 错误" } }));
             throw new Error(`API 错误: ${errorJson.error.message || res.statusText}`); 
         }
 
@@ -898,7 +924,9 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
                     if (d === '[DONE]') continue;
                     try { 
                         const j = JSON.parse(d); 
-                        const chunk = j.choices?.[0]?.delta?.content || j.content || ""; 
+                        const chunk = j.choices?.[0]?.delta?.content 
+                            || j.content 
+                            || ""; 
                         if (chunk) { aiFullText += chunk; }
                     } catch (e) {
                         console.error("SSE JSON Parse Error:", e);
@@ -925,11 +953,9 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
             aiContentDiv.innerText = aiFullText;
         }
 
-        // --- 修复关键：使用引用插入 meta 和按钮 ---
-        // 插入元数据
+        // --- 成功完成时，插入 meta 和按钮 ---
         aiMsgBubble.insertAdjacentHTML('beforeend', `<div class="msg-meta">${formatTime(Date.now())}</div>`);
         
-        // 插入重新生成按钮
         aiMsgBubble.insertAdjacentHTML('beforeend', `
             <div class="regenerate-action" style="margin-top:8px; text-align:right;">
                 <button class="icon-btn" onclick="regenerateResponse('${aiMsgId}')" style="color:var(--primary-color); background:rgba(0,0,0,0.05); padding:4px 10px; border-radius:6px; font-size:12px;">
@@ -947,12 +973,11 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
         updateTokenDisplay(updatedTokens);
 
     } catch (e) { 
-        // --- 修复关键：使用引用插入错误提示和按钮 ---
+        // --- 失败时，插入错误提示和按钮 ---
         const errorMsgHtml = `<br><span style="color:var(--danger-color)">Error: ${e.message}</span>`;
         // 如果 aiContentDiv 已经被流式渲染填充，则追加错误信息
         aiContentDiv.innerHTML += errorMsgHtml;
         
-        // 插入重新生成按钮
         aiMsgBubble.insertAdjacentHTML('beforeend', `
             <div class="regenerate-action" style="margin-top:8px; text-align:right;">
                 <button class="icon-btn" onclick="regenerateResponse('${aiMsgId}')" style="color:var(--primary-color); background:rgba(0,0,0,0.05); padding:4px 10px; border-radius:6px; font-size:12px;">
@@ -987,7 +1012,7 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     div.className = `message-row ${role === 'user' ? 'user' : 'ai'}`;
     
     // 使用时间戳和随机数生成唯一的 ID，用于流式渲染和重新生成追踪
-    const messageId = id || (role === 'ai' ? `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}` : null);
+    const messageId = id || (role === 'assistant' ? `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}` : null);
     if (messageId) div.id = messageId;
     
     let avatarHtml = '';
@@ -1015,7 +1040,6 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
             try {
                 // 安全渲染，防止 marked 报错阻塞 UI
                 cHtml = DOMPurify.sanitize(marked.parse(text));
-                // addCopyButtons(cHtml); // 不在这里调用，交给 sendMessage 最终调用
             } catch (e) {
                 console.error("Marked parse error:", e);
                 cHtml = text.replace(/</g, "&lt;"); // 降级为纯文本
