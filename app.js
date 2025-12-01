@@ -1,23 +1,50 @@
 let PRESETS = [], currentSessionId = null, currentAiAvatar = null, isRequesting = false, uploadedFiles = [];
+// 新增：当前会话模型的上下文长度
+let currentContextLen = 0; 
 let authToken = localStorage.getItem('authToken'), isAdmin = localStorage.getItem('isAdmin') === 'true';
 let isSearchEnabled = false;
 
 // 注册模式状态
 let isRegisterMode = false;
 
-// --- 核心修复：Marked 配置 ---
-// 新版 marked (v4+) 建议使用 marked.use，或者直接使用默认 parse
-// 为了防止 highlight.js 导致崩溃，这里加了保护
+// --- 核心修复：Marked 配置 - 增加代码高亮和复制按钮 ---
 try {
+    // 增加复制按钮的 HTML 模板
+    const copyButtonHtml = `
+        <button class="copy-code-btn icon-btn" style="position:absolute; top:8px; right:8px; background:rgba(255,255,255,0.2); color:#fff; padding:6px; border-radius:6px; font-size:12px;" onclick="copyCode(this)">
+            <i data-lucide="copy" style="width:14px;height:14px;"></i>
+        </button>
+    `;
+
     marked.use({
         breaks: true,
         gfm: true,
         async: false,
-        // 如果你需要代码高亮，请确保 highlight.js 已正确加载
-        // 这里做一个简单的挂钩
+        highlight: function (code, lang) {
+            const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+            return hljs.highlight(code, { language }).value;
+        },
+        renderer: {
+            code(code, lang, escaped) {
+                if (this.options.highlight) {
+                    const out = this.options.highlight.call(this, code, lang);
+                    if (out != null && out !== code) {
+                        escaped = true;
+                        code = out;
+                    }
+                }
+                
+                const languageClass = lang ? `language-${lang}` : 'hljs';
+                
+                // 将代码块包装在 pre 标签内，并添加复制按钮
+                return `<pre style="position:relative;"><code class="${languageClass}">${code}\n</code>${copyButtonHtml}</pre>`;
+            },
+        },
         hooks: {
-            preprocess(markdown) { return markdown; },
-            postprocess(html) { return html; }
+            // 在渲染完成后为所有代码块添加复制按钮
+            postprocess(html) {
+                return html; // 复制按钮已在 renderer.code 中添加
+            }
         }
     });
 } catch (e) {
@@ -25,6 +52,19 @@ try {
 }
 
 window.onload = function() {
+    // 注册 PWA Service Worker
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(registration => {
+                    console.log('SW registered:', registration);
+                })
+                .catch(error => {
+                    console.log('SW registration failed:', error);
+                });
+        });
+    }
+    
     const theme = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', theme);
     
@@ -61,6 +101,8 @@ async function handleSubmit() {
         await handleLogin();
     }
 }
+
+// ... (handleRegister 和 handleLogin 等函数保持不变)
 
 // --- 切换 登录/注册 模式 ---
 function toggleRegisterMode() {
@@ -333,7 +375,28 @@ async function toggleInviteSystem() {
 async function generateInviteCode() {
     try { const res = await fetch('/api/admin/invite/generate', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); const data = await res.json(); if (data.success) fetchInviteInfo(); } catch(e) { alert("生成失败"); }
 }
-function copyText(text) { navigator.clipboard.writeText(text).then(() => { alert("邀请码已复制: " + text); }); }
+function copyText(text) { 
+    // 使用 document.execCommand('copy') 作为备用方案
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => { 
+            // alert("已复制: " + text); 
+            // 避免使用 alert，这里可以改用一个轻量级提示
+            showToast("已复制到剪贴板");
+        }); 
+    } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            showToast("已复制到剪贴板 (Fallback)");
+        } catch (err) {
+            console.error('Fallback copy failed: ', err);
+        }
+        document.body.removeChild(textarea);
+    }
+}
 
 // --- 模型预设逻辑 ---
 async function fetchPresets() {
@@ -342,6 +405,7 @@ async function fetchPresets() {
         const data = await res.json(); 
         if(data.success) { 
             let presets = data.presets;
+            // 确保 libala_main 在最前面
             const libalaIndex = presets.findIndex(p => p.id === 'libala_main');
             if (libalaIndex !== -1) {
                 const libalaPreset = presets.splice(libalaIndex, 1)[0];
@@ -444,6 +508,8 @@ function editPreset(jsonStr) {
     document.getElementById('addUrl').value=p.url; 
     document.getElementById('addKey').value=p.key; 
     document.getElementById('addModelId').value=p.modelId;
+    // 新增：上下文长度
+    document.getElementById('addContextLen').value=p.context_length || ''; 
     document.getElementById('addFormTitle').innerText="编辑预设"; 
     document.getElementById('savePresetBtn').innerText="保存";
     document.querySelectorAll('.accordion-item')[3].classList.add('active'); 
@@ -452,6 +518,7 @@ function editPreset(jsonStr) {
 function resetPresetForm() {
     document.getElementById('addId').value=''; 
     document.getElementById('addPrompt').value=''; 
+    document.getElementById('addContextLen').value=''; // 重置上下文长度
     document.querySelectorAll('#adminModal input[type="text"]').forEach(i=>i.value='');
     document.getElementById('addFormTitle').innerText="添加新预设"; 
     document.getElementById('savePresetBtn').innerText="保存";
@@ -466,14 +533,20 @@ async function savePreset() {
         modelId:document.getElementById('addModelId').value, 
         desc:document.getElementById('addDesc').value,
         icon:document.getElementById('addIcon').value,
-        system_prompt: document.getElementById('addPrompt').value.trim() 
+        system_prompt: document.getElementById('addPrompt').value.trim(),
+        // 新增：获取上下文长度
+        context_length: document.getElementById('addContextLen').value.trim() 
     };
     if(!p.name||!p.url||!p.key||!p.modelId) return alert("请填写完整");
     
     const scrollContainer = document.querySelector('.admin-body');
     const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
 
-    await fetch('/api/admin/preset', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify(p) });
+    await fetch('/api/admin/preset', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, 
+        body: JSON.stringify(p) 
+    });
     
     resetPresetForm(); 
     await fetchAdminPresets(); 
@@ -481,6 +554,108 @@ async function savePreset() {
     
     if (scrollContainer) scrollContainer.scrollTop = savedScrollTop;
 }
+
+// ... (fetchSessions, loadSession, createNewSession, renameSession, deleteSession 等函数保持不变)
+// --- 辅助函数：替换 Alert 和 Copy Code ---
+function showToast(message) {
+    // 避免使用 alert()。使用轻量级提示。
+    const existing = document.getElementById('toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.style.cssText = `
+        position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); 
+        background: var(--primary-color); color: white; padding: 10px 20px; 
+        border-radius: 8px; font-size: 14px; z-index: 1000; opacity: 0; 
+        transition: all 0.3s ease-in-out; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    `;
+    toast.innerText = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => { toast.style.opacity = 1; }, 10);
+    setTimeout(() => { 
+        toast.style.opacity = 0;
+        setTimeout(() => toast.remove(), 300);
+    }, 2000);
+}
+
+function copyCode(button) {
+    // 复制 Markdown 代码块或指令
+    const pre = button.closest('pre');
+    if (!pre) return;
+    
+    // 找到 pre 内的 code 标签，获取文本内容
+    const codeElement = pre.querySelector('code');
+    const textToCopy = codeElement.innerText;
+    
+    copyText(textToCopy); // 使用前面定义的 copyText 函数
+    
+    // 更改按钮图标和提示
+    const icon = button.querySelector('i');
+    icon.setAttribute('data-lucide', 'check');
+    lucide.createIcons({ root: button });
+    
+    setTimeout(() => {
+        icon.setAttribute('data-lucide', 'copy');
+        lucide.createIcons({ root: button });
+    }, 1500);
+}
+
+
+// --- Token 计算与显示逻辑 (简单模拟) ---
+function formatToken(tokens) {
+    if (tokens >= 1000000) return (tokens / 1000000).toFixed(1) + 'M';
+    if (tokens >= 1000) return Math.round(tokens / 1000) + 'k';
+    return tokens;
+}
+
+function countTokens(messages) {
+    let count = 0;
+    messages.forEach(msg => {
+        let textContent = '';
+        if (typeof msg.content === 'string') {
+            textContent = msg.content;
+        } else if (Array.isArray(msg.content)) {
+            textContent = msg.content.map(c => c.type === 'text' ? c.text : '').join(' ');
+            // 粗略估算图片 token: 170 tokens/image (实际复杂得多)
+            const imageCount = msg.content.filter(c => c.type === 'image_url').length;
+            count += imageCount * 170;
+        }
+        // 粗略估算 token: 1 字符约等于 0.5~1 token (中文/英文混合)
+        count += textContent.length * 0.75; 
+    });
+    return Math.round(count);
+}
+
+function updateTokenDisplay(currentTokens) {
+    const tokenDisplay = document.getElementById('tokenDisplay');
+    const tokenLimitText = document.getElementById('tokenLimitText');
+    const tokenCurrentText = document.getElementById('tokenCurrentText');
+    
+    if (currentContextLen > 0) {
+        tokenLimitText.innerText = formatToken(currentContextLen);
+        tokenCurrentText.innerText = formatToken(currentTokens);
+        tokenDisplay.style.display = 'flex';
+        
+        // 样式提醒
+        const usage = currentTokens / currentContextLen;
+        if (usage > 0.8) {
+            tokenDisplay.style.color = 'var(--danger-color)';
+            tokenDisplay.style.borderColor = 'var(--danger-color)';
+        } else if (usage > 0.6) {
+            tokenDisplay.style.color = '#f59e0b'; // Amber
+            tokenDisplay.style.borderColor = '#f59e0b';
+        } else {
+            tokenDisplay.style.color = 'var(--text-secondary)';
+            tokenDisplay.style.borderColor = 'var(--border-color)';
+        }
+
+    } else {
+        tokenDisplay.style.display = 'none';
+    }
+}
+
 
 // --- 会话/聊天逻辑 ---
 async function fetchSessions() {
@@ -528,6 +703,8 @@ async function loadSession(id) {
         
         const currentPreset = PRESETS.find(p => p.id === json.session.mode);
         currentAiAvatar = currentPreset ? (currentPreset.icon || 'bot') : 'bot';
+        // 更新上下文长度
+        currentContextLen = currentPreset ? (currentPreset.context_length || 0) : 0;
         
         document.getElementById('headerTitle').innerText = json.session.title;
         const box = document.getElementById('chat-box'); 
@@ -536,20 +713,25 @@ async function loadSession(id) {
         if (json.messages.length === 0) 
             box.innerHTML = '<div id="emptyState" style="text-align:center; padding:80px; color:var(--text-secondary);"><i data-lucide="message-square-plus" style="width:48px;height:48px;opacity:0.2;margin-bottom:16px;"></i><br>开始新的对话</div>';
         
+        // 计算 Token
+        const currentTokens = countTokens(json.messages.map(m => ({ role: m.role, content: m.content })));
+        updateTokenDisplay(currentTokens);
+
         // 渲染消息循环，增加 try-catch 保护
         json.messages.forEach(m => {
             try {
                 let textContent = typeof m.content === 'string' ? m.content : m.content.map(c => c.type === 'text' ? c.text : '').join('');
                 let images = [];
                 
-                // 处理图片：支持 R2 URL 和 Base64
                 if (Array.isArray(m.content)) {
                     images = m.content
                         .filter(c => c.type === 'image_url')
                         .map(c => c.image_url.url);
                 }
                 
-                appendUI(null, m.role, textContent, images, false, m.timestamp);
+                // 给 AI 消息一个 ID，用于重新生成
+                const msgId = m.role === 'ai' ? `msg-${m.timestamp}-${Math.random().toString(36).substring(2, 6)}` : null; 
+                appendUI(msgId, m.role, textContent, images, false, m.timestamp);
             } catch (err) {
                 console.error("渲染消息失败:", err);
             }
@@ -580,20 +762,86 @@ async function deleteSession(id) {
     fetchSessions();
 }
 
-async function sendMessage() {
+/**
+ * 重新生成回复
+ * @param {string} msgId 要重新生成的 AI 消息的 ID
+ */
+async function regenerateResponse(msgId) {
+    if (isRequesting || !currentSessionId) return;
+
+    // 1. 从 DOM 中移除旧的 AI 消息
+    const oldAiMsg = document.getElementById(msgId);
+    if (oldAiMsg) {
+        oldAiMsg.remove();
+    } else {
+        showToast("无法定位旧消息进行删除。");
+    }
+
+    // 2. 重新加载会话以获取最新的消息列表
+    const sessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+    const sessData = await sessRes.json();
+    
+    // 3. 构造新的 messages 列表
+    // 移除最后一条消息（即用户发送的消息，这是我们想要重新生成其回复的消息）
+    const lastUserMsg = sessData.messages[sessData.messages.length - 1];
+    
+    // 确保最后一条是用户消息，且不是正在进行中的请求
+    if (!lastUserMsg || lastUserMsg.role !== 'user') {
+        showToast("无法进行重新生成，最后一条消息不是用户发送的。");
+        // 重新加载页面来修正UI
+        loadSession(currentSessionId);
+        return;
+    }
+
+    // 4. 构造用于发送给 API 的消息列表 (包含用户消息)
+    const msgsForApi = sessData.messages.map(m => ({ role: m.role, content: m.content }));
+    
+    // 5. 立即发起请求
+    await sendMessage(msgsForApi, true, sessData.session.mode);
+}
+
+
+/**
+ * 发送消息的核心函数
+ * @param {Array<object>} [messageContext] - 可选。重新生成时传入完整的上下文消息列表。
+ * @param {boolean} [isRegenerate=false] - 是否是重新生成请求。
+ * @param {string} [presetIdOverride] - 重新生成时使用的预设 ID。
+ */
+async function sendMessage(messageContext = null, isRegenerate = false, presetIdOverride = null) {
     if (isRequesting || !currentSessionId) return;
     const input = document.getElementById('userInput');
     const text = input.value.trim();
-    if (!text && uploadedFiles.length === 0) return;
     
-    // 构建消息 payload
-    const payload = uploadedFiles.map(f => f.type.startsWith('image/') ? {type:"image_url", image_url:{url:f.data}} : {type:"text", text:`[文件 ${f.name}]:\n${f.data}\n`});
-    if (text) payload.push({ type: "text", text });
+    let messages = messageContext;
+    let currentPresetId;
+    let payload;
+
+    if (!isRegenerate) {
+        if (!text && uploadedFiles.length === 0) return;
+        
+        // 1. 构建新的用户消息 payload
+        payload = uploadedFiles.map(f => f.type.startsWith('image/') ? {type:"image_url", image_url:{url:f.data}} : {type:"text", text:`[文件 ${f.name}]:\n${f.data}\n`});
+        if (text) payload.push({ type: "text", text });
+        
+        // 2. 立即显示用户消息
+        appendUI(null, "user", text + (uploadedFiles.length?`\n(📎 ${uploadedFiles.length} 附件)`:''), uploadedFiles.filter(f=>f.type.startsWith('image/')).map(f=>f.data), false, Date.now());
+        
+        // 3. 获取完整上下文，并将新消息加入
+        const sessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        const sessData = await sessRes.json();
+        currentPresetId = sessData.session.mode;
+        
+        messages = sessData.messages.map(m => ({ role: m.role, content: m.content }));
+        messages.push({ role: "user", content: payload }); // 包含了 R2 链接或 Base64 的消息
+        
+        input.value = ''; uploadedFiles = []; renderPreviews(); autoResize(input);
+
+    } else {
+        // 重新生成模式：messages 已经被传入，不需要重新构建 payload 或清空输入框
+        if (!messages) return;
+        currentPresetId = presetIdOverride;
+    }
     
-    // UI 立即显示（此时图片还是 Base64，等待后端处理后存为 R2 链接）
-    appendUI(null, "user", text + (uploadedFiles.length?`\n(📎 ${uploadedFiles.length} 附件)`:''), uploadedFiles.filter(f=>f.type.startsWith('image/')).map(f=>f.data), false, Date.now());
-    
-    input.value = ''; uploadedFiles = []; renderPreviews(); autoResize(input);
     isRequesting = true; document.getElementById('sendBtn').disabled = true;
     
     const aiMsgId = appendUI(null, "ai", "", [], true); 
@@ -601,17 +849,22 @@ async function sendMessage() {
     let aiFullText = "";
 
     try {
-        const sessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        const sessData = await sessRes.json();
-        const msgs = sessData.messages.map(m => ({ role: m.role, content: m.content }));
-        msgs.push({ role: "user", content: payload });
-
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-            body: JSON.stringify({ sessionId: currentSessionId, presetId: sessData.session.mode, messages: msgs, useSearch: isSearchEnabled })
+            body: JSON.stringify({ 
+                sessionId: currentSessionId, 
+                presetId: currentPresetId, 
+                messages: messages, 
+                useSearch: isSearchEnabled,
+                isRegenerate: isRegenerate // 传递给后端，告知不要重复保存用户消息
+            })
         });
-        if (!res.ok) throw new Error("API Error");
+        
+        if (!res.ok) { 
+            const errorJson = await res.json();
+            throw new Error(`API 错误: ${errorJson.error.message || res.statusText}`); 
+        }
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
@@ -619,11 +872,20 @@ async function sendMessage() {
             const { done, value } = await reader.read();
             if (done) break;
             const lines = decoder.decode(value, { stream: true }).split('\n');
+            
+            // 处理 SSE 流
             for (const line of lines) {
                 if (line.startsWith('data: ')) {
                     const d = line.slice(6).trim();
                     if (d === '[DONE]') continue;
-                    try { const j = JSON.parse(d); aiFullText += (j.choices?.[0]?.delta?.content || j.content || ""); } catch {}
+                    try { 
+                        const j = JSON.parse(d); 
+                        const chunk = j.choices?.[0]?.delta?.content || j.content || ""; 
+                        if (chunk) { aiFullText += chunk; }
+                    } catch (e) {
+                         // 忽略解析错误，继续处理下一个 chunk
+                        console.error("SSE JSON Parse Error:", e);
+                    }
                 }
             }
             
@@ -640,32 +902,60 @@ async function sendMessage() {
         
         // 最终渲染保护
         try {
-            // 代码高亮需配合 highlight.js
-            if(window.hljs) {
-                // 如果使用 marked.use 配置了 highlight，这里 parse 会自动处理
-                aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
-            } else {
-                aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
-            }
+            aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+            addCopyButtons(aiContentDiv); // 在最终渲染后添加复制按钮
         } catch (e) {
             aiContentDiv.innerText = aiFullText;
         }
-        
+
+        // 重新设置消息 ID，并添加元数据/按钮
+        document.getElementById(aiMsgId).id = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
         document.querySelector(`#${aiMsgId} .message-bubble`).insertAdjacentHTML('beforeend', `<div class="msg-meta">${formatTime(Date.now())}</div>`);
+        
+        // 刷新会话列表并更新 Token 显示
         fetchSessions();
-    } catch (e) { aiContentDiv.innerHTML += `<br><span style="color:var(--danger-color)">Error: ${e.message}</span>`; } 
-    finally { isRequesting = false; document.getElementById('sendBtn').disabled = false; }
+        const updatedSessRes = await fetch(`/api/session/${currentSessionId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        const updatedSessData = await updatedSessRes.json();
+        const updatedTokens = countTokens(updatedSessData.messages.map(m => ({ role: m.role, content: m.content })));
+        updateTokenDisplay(updatedTokens);
+
+    } catch (e) { 
+        aiContentDiv.innerHTML += `<br><span style="color:var(--danger-color)">Error: ${e.message}</span>`;
+        // 在错误消息后添加重新生成按钮
+        aiContentDiv.parentElement.insertAdjacentHTML('beforeend', `
+            <div class="regenerate-action" style="margin-top:8px; text-align:right;">
+                <button class="icon-btn" onclick="regenerateResponse('${aiMsgId}')" style="color:var(--primary-color); background:rgba(0,0,0,0.05);">
+                    <i data-lucide="rotate-ccw" style="width:14px;"></i> 重新生成
+                </button>
+            </div>
+        `);
+        lucide.createIcons({ root: aiContentDiv.parentElement });
+    } finally { 
+        isRequesting = false; 
+        document.getElementById('sendBtn').disabled = false; 
+    }
 }
 
 function formatTime(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
 
+/**
+ * 渲染 UI 消息
+ * @param {string | null} id - 消息的 DOM ID，用于重新生成。
+ * @param {string} role - 角色 ('user' 或 'ai')
+ * @param {string} text - 消息的纯文本内容。
+ * @param {Array<string>} images - 图片 URL 数组。
+ * @param {boolean} isLoading - 是否为加载状态。
+ * @param {number | null} timestamp - 时间戳。
+ * @returns {string} 消息的 DOM ID。
+ */
 function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     const empty = document.getElementById('emptyState');
     if (empty) empty.remove();
     const box = document.getElementById('chat-box');
     const div = document.createElement('div');
     div.className = `message-row ${role === 'user' ? 'user' : 'ai'}`;
-    div.id = id || ('msg-' + Date.now());
+    const messageId = id || ('msg-' + Date.now());
+    div.id = messageId;
     
     let avatarHtml = '';
     if (role === 'user') {
@@ -682,6 +972,8 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
     }
 
     let cHtml = '';
+    let additionalContent = '';
+    
     if (role === 'user') {
         cHtml = images.map(u=>`<img src="${u}">`).join('<br>') + (text ? text.replace(/</g, "&lt;") : '');
     } else {
@@ -689,19 +981,56 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
             cHtml = '<span style="color:var(--text-secondary)">Thinking...</span>';
         } else {
             try {
-                // 安全渲染，防止 marked 报错阻塞 UI
                 cHtml = DOMPurify.sanitize(marked.parse(text));
+                addCopyButtons(cHtml); // 在最终渲染前预处理代码块
             } catch (e) {
                 console.error("Marked parse error:", e);
-                cHtml = text.replace(/</g, "&lt;"); // 降级为纯文本
+                cHtml = text.replace(/</g, "&lt;");
+            }
+            // 非加载状态下，添加重新生成按钮
+            if (!isLoading) {
+                additionalContent = `
+                    <div class="regenerate-action" style="margin-top:8px; text-align:right;">
+                        <button class="icon-btn" onclick="regenerateResponse('${messageId}')" style="color:var(--primary-color); background:rgba(0,0,0,0.05); padding:4px 8px; border-radius:6px; font-size:12px;">
+                            <i data-lucide="rotate-ccw" style="width:14px; margin-right:4px;"></i> 重新生成
+                        </button>
+                    </div>
+                `;
             }
         }
     }
     
-    div.innerHTML = `<div class="avatar ${role==='user'?'user-avatar':'ai-avatar'}">${avatarHtml}</div><div class="message-bubble"><div class="message-content">${cHtml}</div>${(timestamp&&!isLoading)?`<div class="msg-meta">${formatTime(timestamp)}</div>`:''}</div>`;
+    div.innerHTML = `<div class="avatar ${role==='user'?'user-avatar':'ai-avatar'}">${avatarHtml}</div><div class="message-bubble"><div class="message-content">${cHtml}</div>${(timestamp&&!isLoading)?`<div class="msg-meta">${formatTime(timestamp)}</div>`:''}${role==='ai'?additionalContent:''}</div>`;
     box.appendChild(div); box.scrollTop = box.scrollHeight; lucide.createIcons({ root: div });
-    return div.id;
+    return messageId;
 }
+
+/**
+ * 遍历消息内容，为代码块添加复制按钮 (供最终渲染调用)
+ */
+function addCopyButtons(element) {
+    if (typeof element === 'string') {
+        // 如果传入的是 HTML 字符串，先转为 DOM 元素进行操作
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = element;
+        element = tempDiv;
+    }
+    
+    // 查找所有代码块 <pre>
+    element.querySelectorAll('pre').forEach(pre => {
+        // 复制按钮已在 marked.js 的 renderer.code 中添加，这里只需确保 lucide 图标被创建
+        lucide.createIcons({ root: pre });
+    });
+
+    // 查找所有行内代码 <code>，为需要复制的指令添加按钮 (可选，目前只处理代码块)
+    // 如果要为所有行内代码添加复制按钮，需要更复杂的逻辑，目前保持仅处理代码块
+
+    // 如果传入的是临时 div，返回其内部 HTML 字符串
+    if (element.id !== 'chat-box' && !element.classList.contains('message-content')) {
+        return element.innerHTML;
+    }
+}
+
 
 function handlePaste(e) { Array.from(e.clipboardData.items).forEach(i => { if(i.kind==='file') processFile(i.getAsFile()); }); }
 function handleFileSelect(input) { Array.from(input.files).forEach(processFile); input.value = ''; }
@@ -713,7 +1042,8 @@ function processFile(file) {
 function renderPreviews() {
     const area = document.getElementById('preview-area'); area.innerHTML = '';
     uploadedFiles.forEach((f, i) => {
-        area.innerHTML += `<div class="preview-item">${f.type.startsWith('image/')?`<img src="${f.data}">`:'<i data-lucide="file-text"></i>'}<div class="remove-file" onclick="uploadedFiles.splice(${i},1);renderPreviews()"><i data-lucide="x" style="width:14px"></i></div></div>`;
+        area.innerHTML += `<div class="preview-item">${f.type.startsWith('image/')?`<img src="${f.data}">`:
+            `<i data-lucide="file-text" style="width:20px; height:20px;"></i>`}<div class="remove-file" onclick="uploadedFiles.splice(${i},1);renderPreviews()"><i data-lucide="x" style="width:14px"></i></div></div>`;
     }); lucide.createIcons();
 }
 function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
@@ -736,7 +1066,7 @@ async function handleSearch(query) {
 async function deletePreset(id) { if(confirm("删除?")) { await fetch('/api/admin/preset/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id }) }); 
     fetchAdminPresets(); fetchPresets(); 
 } }
-async function forceMigrate() { if(confirm("导入旧数据?")) { const res=await fetch('/api/admin/migrate', { method:'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); alert((await res.json()).message); location.reload(); } }
+async function forceMigrate() { if(confirm("导入旧数据?")) { const res=await fetch('/api/admin/migrate', { method:'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); showToast((await res.json()).message); location.reload(); } }
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.querySelector('.overlay').classList.toggle('show'); }
 function toggleTheme() { const n = document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'; document.documentElement.setAttribute('data-theme',n); localStorage.setItem('theme',n); lucide.createIcons(); }
 
@@ -758,14 +1088,14 @@ async function forceMigrateImages() {
         const data = await res.json();
         
         if (data.success) {
-            alert(data.message);
+            showToast(data.message);
             // 迁移完成后刷新会话列表，确保最新数据被加载
             fetchSessions();
         } else {
-            alert("迁移失败: " + data.message);
+            showToast("迁移失败: " + data.message);
         }
     } catch (e) {
-        alert("请求失败: " + e.message);
+        showToast("请求失败: " + e.message);
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
