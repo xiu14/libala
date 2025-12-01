@@ -11,8 +11,8 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- 0. R2 对象存储配置 ---
-// 必须在 .env 文件中配置以下变量
+// --- 0. R2 对象存储配置 (已修复签名问题) ---
+// 必须在 Zeabur 环境变量中配置: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_DOMAIN
 const hasR2Config = process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_DOMAIN;
 
 if (!hasR2Config) {
@@ -22,12 +22,17 @@ if (!hasR2Config) {
 }
 
 const r2Client = hasR2Config ? new S3Client({
-    region: 'auto',
+    // 关键修复 1: R2 必须使用 us-east-1 区域以兼容 AWS SDK 签名
+    region: 'us-east-1', 
     endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     credentials: {
         accessKeyId: process.env.R2_ACCESS_KEY_ID,
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
     },
+    // 关键修复 2: 禁用 SDK 自动计算 Checksum，防止 R2 签名不匹配 (SignatureDoesNotMatch)
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
+    forcePathStyle: true 
 }) : null;
 
 const R2_DOMAIN = process.env.R2_DOMAIN; 
@@ -42,9 +47,10 @@ for (const key in process.env) {
 const ADMIN_USER = process.env.ADMIN_USER || "libala";
 
 // --- 2. 数据存储 ---
+// Zeabur 等容器环境建议使用 /app/data
 const DATA_DIR = '/app/data'; 
-// 本地开发如果没有 /app/data，会自动降级到当前目录的 data 文件夹
 const LOCAL_DATA_DIR = path.join(__dirname, 'data');
+// 自动判断环境
 const DB_DIR = fs.existsSync('/app') ? DATA_DIR : LOCAL_DATA_DIR;
 const DB_FILE = path.join(DB_DIR, 'chat.db'); 
 const OLD_DB_FILE = path.join(DB_DIR, 'database.json');
