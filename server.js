@@ -129,6 +129,12 @@ function initDB() {
                 db.run("ALTER TABLE presets ADD COLUMN context_length INTEGER", (err) => {
                     // 忽略 "duplicate column name" 错误
                 });
+                
+                // 修复：为旧数据设置默认 context_length (128000)
+                db.run("UPDATE presets SET context_length = 128000 WHERE context_length IS NULL", (err) => {
+                    if (err) console.error("Error setting default context_length:", err);
+                });
+
 
                 db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT, title TEXT, mode TEXT, created_at INTEGER, updated_at INTEGER)`);
                 db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE)`);
@@ -212,6 +218,7 @@ async function checkDefaultPresets() {
         stmt.finalize();
     }
 }
+
 // --- R2 上传逻辑 ---
 async function uploadToR2(base64Data) {
     if (!hasR2Config) return null;
@@ -385,7 +392,8 @@ app.post('/api/admin/invite/generate', async (req, res) => {
 
 // 获取配置（新增返回 context_length）
 app.get('/api/config', async (req, res) => {
-    const presets = await dbAll("SELECT id, name, desc, icon, system_prompt, context_length FROM presets");
+    // 修复：使用 COALESCE 函数确保 context_length 字段返回默认值 128000，避免 NULL 导致前端隐藏 Token 显示
+    const presets = await dbAll("SELECT id, name, desc, icon, system_prompt, COALESCE(context_length, 128000) as context_length FROM presets");
     res.json({ success: true, presets });
 });
 
@@ -495,12 +503,11 @@ app.post('/api/admin/announcement/delete', async (req, res) => {
     res.json({ success: true });
 });
 
-// --- Chat (增加 isRegenerate 逻辑) ---
+// --- Chat (增加 isRegenerate 逻辑和增强流式解析) ---
 app.post('/api/chat', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (!user) return res.status(403).json({ error: { message: "登录已过期" } });
     
-    // isRegenerate: 如果为 true，则不保存最后一条用户消息（假设已经存在）
     let { sessionId, presetId, messages, useSearch, isRegenerate } = req.body;
     const now = Date.now();
 
@@ -512,7 +519,6 @@ app.post('/api/chat', async (req, res) => {
         
         // 只有非重新生成请求，才保存用户消息
         if (!isRegenerate && lastMsg && lastMsg.role === 'user') {
-            // 处理 R2 上传
             const processedMsgs = await processMessagesForR2([lastMsg]); 
             const msgToSave = processedMsgs[0];
 
@@ -522,9 +528,7 @@ app.post('/api/chat', async (req, res) => {
             await dbRun("UPDATE sessions SET updated_at=? WHERE id=?", [now, sessionId]);
             messages[messages.length-1] = msgToSave; 
         } else if (isRegenerate) {
-            // 如果是重新生成，仅更新会话时间，不插入 User 消息
             await dbRun("UPDATE sessions SET updated_at=? WHERE id=?", [now, sessionId]);
-            // 注意：这里我们假设前端已经把上下文（不包含旧的错误回复）发过来了
         }
 
         let finalMsgs = [...messages];
@@ -547,14 +551,24 @@ app.post('/api/chat', async (req, res) => {
         if (url.endsWith('/')) url = url.slice(0, -1);
         if (!url.includes('/chat/completions')) url += '/v1/chat/completions';
 
-        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+        // --- 关键：发起 API 请求 ---
         const apiRes = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${preset.key}` },
             body: JSON.stringify({ model: preset.modelId, messages: finalMsgs, temperature: 0.7, stream: true })
         });
+        
+        // 1. 检查 API 响应状态码
+        if (!apiRes.ok) {
+            const errorBody = await apiRes.json().catch(() => ({ message: apiRes.statusText || "未知 API 错误" }));
+            console.error(`API Error (${apiRes.status}):`, errorBody);
+            // 将 API 错误信息返回给前端
+            res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+            res.write(`data: ${JSON.stringify({ error: errorBody })}\n\n`); 
+            return res.end(); 
+        }
 
-        if (!apiRes.ok) { res.write(`data: ${JSON.stringify({ error: await apiRes.json() })}\n\n`); return res.end(); }
+        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
 
         let fullText = "";
         apiRes.body.on('data', chunk => {
@@ -563,10 +577,28 @@ app.post('/api/chat', async (req, res) => {
                 if (line.startsWith('data: ')) {
                     const d = line.slice(6).trim();
                     if (d === '[DONE]') continue;
-                    try { const j = JSON.parse(d); const c = j.choices?.[0]?.delta?.content || j.content || ""; if (c) { fullText += c; res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}\n\n`); } } catch {}
+                    try { 
+                        const j = JSON.parse(d); 
+                        
+                        // 增强解析逻辑: 兼容多种 SSE 格式 (OpenAI, Gemini Proxies)
+                        const c = j.choices?.[0]?.delta?.content 
+                            || j.content 
+                            || j.text // for some custom endpoints
+                            || ""; 
+                            
+                        if (c) { 
+                            fullText += c; 
+                            // 将内容以标准 OpenAI 格式返回给前端
+                            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}\n\n`); 
+                        } 
+                    } catch (e) {
+                         // 忽略无法解析的 JSON 片段，防止流中断
+                        // console.error("SSE JSON Parse Error:", e, "Line:", line);
+                    }
                 }
             }
         });
+        
         apiRes.body.on('end', async () => {
             res.write('data: [DONE]\n\n'); res.end();
             if (fullText.trim()) {
@@ -574,11 +606,25 @@ app.post('/api/chat', async (req, res) => {
                 if (u) await dbRun("UPDATE usage SET count=count+1 WHERE user=? AND model_id=?", [user, presetId]);
                 else await dbRun("INSERT INTO usage (user, model_id, count) VALUES (?, ?, 1)", [user, presetId]);
                 
-                // 无论是否是 regenerate，AI 的回复都是新的，都要保存
                 await dbRun("INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)", [sessionId, 'assistant', fullText, Date.now()]);
             }
         });
-    } catch (e) { if(!res.headersSent) res.status(500).json({ error: e.message }); else res.end(); }
+        
+        apiRes.body.on('error', (e) => {
+            console.error("API Stream Error:", e);
+            if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'text/event-stream' });
+                res.write(`data: ${JSON.stringify({ error: { message: "流式传输中断或网络错误: " + e.message } })}\n\n`);
+            }
+            res.end();
+        });
+
+
+    } catch (e) { 
+        console.error("Chat Request Setup Error:", e);
+        if(!res.headersSent) res.status(500).json({ error: { message: "内部服务器错误: " + e.message } }); 
+        else res.end(); 
+    }
 });
 
 // --- Admin ---
@@ -597,9 +643,9 @@ app.post('/api/admin/preset', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false });
     
-    // 确保 context_length 存在，默认 100k
+    // 确保 context_length 存在，默认 128000
     const { id, name, url, key, modelId, desc, icon, system_prompt, context_length } = req.body;
-    const ctxLen = context_length ? parseInt(context_length) : 100000;
+    const ctxLen = context_length ? parseInt(context_length) : 128000;
 
     const fid = id || 'model_' + Date.now();
     await dbRun("INSERT OR REPLACE INTO presets (id, name, desc, url, key, modelId, icon, system_prompt, context_length) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
