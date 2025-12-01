@@ -1,7 +1,7 @@
 {
   "name": "ai-chat-admin",
-  "version": "3.1.0",
-  "description": "AI Chat with SQLite",
+  "version": "3.2.0",
+  "description": "AI Chat with SQLite & R2",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -11,6 +11,7 @@
     "node-fetch": "^2.6.9",
     "cors": "^2.8.5",
     "sqlite3": "^5.1.6",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "@aws-sdk/client-s3": "^3.400.0"
   }
 }
