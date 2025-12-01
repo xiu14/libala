@@ -7,13 +7,14 @@
     
     <link rel="preload" as="image" href="logo.png">
 
-    <script src="marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css">
+    
+    <link rel="stylesheet" href="style.css?v=3.2">
     
     <style>
         #login-screen {
@@ -316,6 +317,9 @@
                 <button class="btn-danger sidebar-btn" onclick="forceMigrate()" style="justify-content:center;">
                     <i data-lucide="database-backup"></i> 从旧数据导入
                 </button>
+                <button class="btn-ghost sidebar-btn" onclick="forceMigrateImages()" style="justify-content:center; margin-top:10px;">
+                    <i data-lucide="image-up"></i> 迁移旧图片到 R2
+                </button>
             </div>
         </div>
     </div>
@@ -385,6 +389,6 @@
         </div>
     </div>
 </div>
-<script src="app.js"></script>
+<script src="app.js?v=3.2"></script>
 </body>
 </html>
