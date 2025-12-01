@@ -5,19 +5,40 @@ let isSearchEnabled = false;
 // 注册模式状态
 let isRegisterMode = false;
 
-// 配置 marked (适配 v4.3.0)
-marked.setOptions({ highlight: (c,l) => highlight.highlight(c, {language: highlight.getLanguage(l)?l:'plaintext'}).value, breaks: true, gfm: true });
+// --- 核心修复：Marked 配置 ---
+// 新版 marked (v4+) 建议使用 marked.use，或者直接使用默认 parse
+// 为了防止 highlight.js 导致崩溃，这里加了保护
+try {
+    marked.use({
+        breaks: true,
+        gfm: true,
+        async: false,
+        // 如果你需要代码高亮，请确保 highlight.js 已正确加载
+        // 这里做一个简单的挂钩
+        hooks: {
+            preprocess(markdown) { return markdown; },
+            postprocess(html) { return html; }
+        }
+    });
+} catch (e) {
+    console.warn("Marked 配置警告:", e);
+}
 
 window.onload = function() {
     const theme = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', theme);
-    lucide.createIcons();
+    
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    
     if (authToken) initApp();
     
     // 聊天输入框回车发送
-    document.getElementById('userInput').addEventListener('keydown', (e) => { 
-        if(e.key==='Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); sendMessage(); } 
-    });
+    const userInput = document.getElementById('userInput');
+    if (userInput) {
+        userInput.addEventListener('keydown', (e) => { 
+            if(e.key==='Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); sendMessage(); } 
+        });
+    }
     
     // 登录页输入框回车提交
     const loginInputs = document.querySelectorAll('.login-input');
@@ -41,7 +62,7 @@ async function handleSubmit() {
     }
 }
 
-// --- 切换 登录/注册 模式 (保留登录页台词) ---
+// --- 切换 登录/注册 模式 ---
 function toggleRegisterMode() {
     isRegisterMode = !isRegisterMode;
     const btn = document.getElementById('actionBtn');
@@ -52,22 +73,19 @@ function toggleRegisterMode() {
     const inviteInput = document.getElementById('regInviteCode'); 
     
     btn.classList.remove('fade-in');
-    void btn.offsetWidth;
+    void btn.offsetWidth; // 触发重绘
     btn.classList.add('fade-in');
 
     if (isRegisterMode) {
-        // 切换到注册模式
         btn.innerText = "注册账号";
         switchText.innerHTML = '已有账号？<span style="color: #9c74ff; font-weight:600;">返回登录</span>';
         user.placeholder = "起个响亮的名字..."; 
         confirmPass.style.display = 'block';
         inviteInput.style.display = 'block'; 
-        // 清空密码
         pass.value = '';
         confirmPass.value = '';
         inviteInput.value = '';
     } else {
-        // 切换回登录模式
         btn.innerText = "进入站点";
         switchText.innerHTML = '没有通行证？<span style="color: #9c74ff; font-weight:600;">立即注册</span>';
         user.placeholder = "写上你的代号，黎吧啦在听。"; 
@@ -104,7 +122,6 @@ async function handleRegister() {
 
         if (data.success) {
             alert(data.message);
-            // 注册成功，自动切回登录模式，并填好用户名
             toggleRegisterMode();
             document.getElementById('loginUser').value = userVal;
             document.getElementById('loginPass').value = '';
@@ -162,7 +179,7 @@ async function initApp() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     if(isAdmin) document.getElementById('adminBtn').style.display = 'flex';
-    await fetchPresets(); // 获取并置顶黎吧啦预设
+    await fetchPresets(); 
     await fetchSessions(); 
     lucide.createIcons();
     checkAnnouncement(false); 
@@ -205,7 +222,10 @@ async function fetchHistoryAnnouncements() {
         if (json.success && json.data && json.data.length > 0) {
             container.innerHTML = json.data.map(item => {
                 const dateStr = new Date(item.timestamp).toLocaleString();
-                const htmlContent = DOMPurify.sanitize(marked.parse(item.content));
+                // 使用 try-catch 保护 marked
+                let htmlContent = item.content;
+                try { htmlContent = DOMPurify.sanitize(marked.parse(item.content)); } catch(e){}
+
                 return `
                     <div style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; padding:16px; font-size:14px;">
                         <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px; border-bottom:1px solid var(--border-color); padding-bottom:8px; display:flex; justify-content:space-between;">
@@ -237,7 +257,11 @@ async function checkAnnouncement(force) {
             currentAnnounceTime = timestamp;
             const last = localStorage.getItem('lastReadAnnounce');
             
-            contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(content));
+            try {
+                contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(content));
+            } catch (err) {
+                contentDiv.innerText = content;
+            }
 
             if (force || (!last || parseInt(last) < timestamp)) {
                 document.getElementById('announceModal').classList.add('open');
@@ -285,7 +309,6 @@ async function deleteAnnouncement(id) {
 // --- 管理后台：邀请码逻辑 ---
 async function fetchInviteInfo() {
     try {
-        // 增加时间戳防止缓存
         const res = await fetch(`/api/admin/invite/info?_=${Date.now()}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
         const data = await res.json();
         if (data.success) {
@@ -312,28 +335,24 @@ async function generateInviteCode() {
 }
 function copyText(text) { navigator.clipboard.writeText(text).then(() => { alert("邀请码已复制: " + text); }); }
 
-// --- 模型预设逻辑 (置顶和 System Prompt 处理) ---
+// --- 模型预设逻辑 ---
 async function fetchPresets() {
     try { 
         const res = await fetch('/api/config'); 
         const data = await res.json(); 
         if(data.success) { 
             let presets = data.presets;
-
-            // 置顶逻辑：找到 'libala_main' 并置顶
             const libalaIndex = presets.findIndex(p => p.id === 'libala_main');
             if (libalaIndex !== -1) {
                 const libalaPreset = presets.splice(libalaIndex, 1)[0];
-                presets.unshift(libalaPreset); // 放到数组最前面
+                presets.unshift(libalaPreset);
             }
-            
             PRESETS = presets;
             renderPresetsSidebar(); 
         } 
     } catch(e){}
 }
 
-// 渲染侧边栏模型列表
 function renderPresetsSidebar() {
     const list = document.getElementById('presetList'); 
     list.innerHTML = '';
@@ -354,19 +373,15 @@ function renderPresetsSidebar() {
     });
 }
 
-// --- 拆分后的管理后台逻辑 (独立刷新) ---
-
-// 1. 打开后台 (只负责显示 Modal 和初始加载)
+// --- 管理后台逻辑 ---
 async function openAdmin() {
     document.getElementById('adminModal').classList.add('open');
     await fetchAdminStats();
     await fetchAdminPresets();
 }
 
-// 2. 独立获取统计数据 (加了防缓存)
 async function fetchAdminStats() {
     const grid = document.getElementById('statGrid'); 
-    // grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:10px;">加载中...</div>'; // 可选：加载状态，为了体验暂不加
     try {
         const res = await fetch(`/api/admin/data?_=${Date.now()}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
         const data = await res.json();
@@ -403,7 +418,6 @@ async function fetchAdminStats() {
     } catch(e) { console.error("Stats load failed", e); }
 }
 
-// 3. 独立获取后台预设列表 (用于保存后刷新)
 async function fetchAdminPresets() {
     const pl = document.getElementById('adminPresetList');
     try {
@@ -420,7 +434,6 @@ async function fetchAdminPresets() {
     } catch(e) { console.error("Presets load failed", e); }
 }
 
-// 填充 system_prompt
 function editPreset(jsonStr) {
     const p = JSON.parse(jsonStr);
     document.getElementById('addId').value=p.id; 
@@ -436,7 +449,6 @@ function editPreset(jsonStr) {
     document.querySelectorAll('.accordion-item')[3].classList.add('active'); 
 }
 
-// 清空
 function resetPresetForm() {
     document.getElementById('addId').value=''; 
     document.getElementById('addPrompt').value=''; 
@@ -445,7 +457,6 @@ function resetPresetForm() {
     document.getElementById('savePresetBtn').innerText="保存";
 }
 
-// 保存预设 (修复：保存后停留在当前位置)
 async function savePreset() {
     const p = { 
         id:document.getElementById('addId').value, 
@@ -459,22 +470,16 @@ async function savePreset() {
     };
     if(!p.name||!p.url||!p.key||!p.modelId) return alert("请填写完整");
     
-    // 1. 记录当前滚动条位置
     const scrollContainer = document.querySelector('.admin-body');
     const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
 
     await fetch('/api/admin/preset', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify(p) });
     
     resetPresetForm(); 
-    
-    // 2. 局部刷新列表，而不是重开 Modal
     await fetchAdminPresets(); 
-    await fetchPresets(); // 刷新侧边栏
+    await fetchPresets();
     
-    // 3. 恢复滚动条位置
-    if (scrollContainer) {
-        scrollContainer.scrollTop = savedScrollTop;
-    }
+    if (scrollContainer) scrollContainer.scrollTop = savedScrollTop;
 }
 
 // --- 会话/聊天逻辑 ---
@@ -516,6 +521,7 @@ async function loadSession(id) {
     document.getElementById('searchInput').value = '';
     document.getElementById('normalSidebarList').style.display = 'flex'; document.getElementById('searchResultList').style.display = 'none';
     document.getElementById('chat-box').innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-secondary);">加载中...</div>';
+    
     try {
         const res = await fetch(`/api/session/${id}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
         const json = await res.json();
@@ -524,13 +530,35 @@ async function loadSession(id) {
         currentAiAvatar = currentPreset ? (currentPreset.icon || 'bot') : 'bot';
         
         document.getElementById('headerTitle').innerText = json.session.title;
-        const box = document.getElementById('chat-box'); box.innerHTML = '';
+        const box = document.getElementById('chat-box'); 
+        box.innerHTML = '';
+        
         if (json.messages.length === 0) 
             box.innerHTML = '<div id="emptyState" style="text-align:center; padding:80px; color:var(--text-secondary);"><i data-lucide="message-square-plus" style="width:48px;height:48px;opacity:0.2;margin-bottom:16px;"></i><br>开始新的对话</div>';
-        json.messages.forEach(m => appendUI(null, m.role, typeof m.content==='string'?m.content:m.content.map(c=>c.type==='text'?c.text:'').join(''), m.content.filter?m.content.filter(c=>c.type==='image_url').map(c=>c.image_url.url):[], false, m.timestamp));
-        fetchSessions(); lucide.createIcons();
+        
+        // 渲染消息循环，增加 try-catch 保护
+        json.messages.forEach(m => {
+            try {
+                let textContent = typeof m.content === 'string' ? m.content : m.content.map(c => c.type === 'text' ? c.text : '').join('');
+                let images = [];
+                
+                // 处理图片：支持 R2 URL 和 Base64
+                if (Array.isArray(m.content)) {
+                    images = m.content
+                        .filter(c => c.type === 'image_url')
+                        .map(c => c.image_url.url);
+                }
+                
+                appendUI(null, m.role, textContent, images, false, m.timestamp);
+            } catch (err) {
+                console.error("渲染消息失败:", err);
+            }
+        });
+
+        fetchSessions(); 
+        lucide.createIcons();
         if(window.innerWidth < 1000) { document.getElementById('sidebar').classList.remove('open'); document.querySelector('.overlay').classList.remove('show'); }
-    } catch(e) { document.getElementById('chat-box').innerHTML = "加载失败"; }
+    } catch(e) { document.getElementById('chat-box').innerHTML = "加载失败: " + e.message; }
 }
 
 async function createNewSession(pid) {
@@ -558,10 +586,13 @@ async function sendMessage() {
     const text = input.value.trim();
     if (!text && uploadedFiles.length === 0) return;
     
+    // 构建消息 payload
     const payload = uploadedFiles.map(f => f.type.startsWith('image/') ? {type:"image_url", image_url:{url:f.data}} : {type:"text", text:`[文件 ${f.name}]:\n${f.data}\n`});
     if (text) payload.push({ type: "text", text });
     
+    // UI 立即显示（此时图片还是 Base64，等待后端处理后存为 R2 链接）
     appendUI(null, "user", text + (uploadedFiles.length?`\n(📎 ${uploadedFiles.length} 附件)`:''), uploadedFiles.filter(f=>f.type.startsWith('image/')).map(f=>f.data), false, Date.now());
+    
     input.value = ''; uploadedFiles = []; renderPreviews(); autoResize(input);
     isRequesting = true; document.getElementById('sendBtn').disabled = true;
     
@@ -596,26 +627,29 @@ async function sendMessage() {
                 }
             }
             
-            // --- 关键修复 1: 增加 try-catch 渲染保护 ---
+            // 流式渲染保护
             try {
                 aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
             } catch (err) {
-                // 如果 marked 崩溃，直接显示纯文本
                 aiContentDiv.innerText = aiFullText;
             }
-            // ----------------------------------------
 
             const box = document.getElementById('chat-box');
             if(box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
         }
         
-        // --- 关键修复 2: 最终渲染保护 ---
+        // 最终渲染保护
         try {
-            aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+            // 代码高亮需配合 highlight.js
+            if(window.hljs) {
+                // 如果使用 marked.use 配置了 highlight，这里 parse 会自动处理
+                aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+            } else {
+                aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+            }
         } catch (e) {
             aiContentDiv.innerText = aiFullText;
         }
-        // ----------------------------------------
         
         document.querySelector(`#${aiMsgId} .message-bubble`).insertAdjacentHTML('beforeend', `<div class="msg-meta">${formatTime(Date.now())}</div>`);
         fetchSessions();
@@ -647,19 +681,19 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
         }
     }
 
-    // 这里需要注意，如果是初始化渲染历史记录时 (isLoading=false)，也会调用 marked
-    // 建议对这里的渲染也做简单保护（可选，但推荐）
     let cHtml = '';
     if (role === 'user') {
-        cHtml = images.map(u=>`<img src="${u}"><br>`).join('') + text.replace(/</g, "&lt;");
+        cHtml = images.map(u=>`<img src="${u}">`).join('<br>') + (text ? text.replace(/</g, "&lt;") : '');
     } else {
         if (isLoading) {
             cHtml = '<span style="color:var(--text-secondary)">Thinking...</span>';
         } else {
             try {
+                // 安全渲染，防止 marked 报错阻塞 UI
                 cHtml = DOMPurify.sanitize(marked.parse(text));
             } catch (e) {
-                cHtml = text; // 降级处理
+                console.error("Marked parse error:", e);
+                cHtml = text.replace(/</g, "&lt;"); // 降级为纯文本
             }
         }
     }
@@ -700,9 +734,40 @@ async function handleSearch(query) {
     }, 300); 
 }
 async function deletePreset(id) { if(confirm("删除?")) { await fetch('/api/admin/preset/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ id }) }); 
-    // 修改为局部刷新
     fetchAdminPresets(); fetchPresets(); 
 } }
 async function forceMigrate() { if(confirm("导入旧数据?")) { const res=await fetch('/api/admin/migrate', { method:'POST', headers: { 'Authorization': `Bearer ${authToken}` } }); alert((await res.json()).message); location.reload(); } }
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.querySelector('.overlay').classList.toggle('show'); }
 function toggleTheme() { const n = document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'; document.documentElement.setAttribute('data-theme',n); localStorage.setItem('theme',n); lucide.createIcons(); }
+
+// --- 新增：图片迁移功能 ---
+// 这个函数对应 index.html 中的 "迁移旧图片到 R2" 按钮
+async function forceMigrateImages() {
+    if (!confirm("确定要开始迁移图片吗？这会将数据库中现有的 Base64 图片上传到 R2 并替换链接。\n过程可能需要几分钟，请勿关闭页面。")) return;
+    
+    const btn = document.querySelector('button[onclick="forceMigrateImages()"]');
+    const originalText = btn.innerText;
+    btn.innerText = "迁移中，请稍候...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/admin/migrate-images', { 
+            method: 'POST', 
+            headers: { 'Authorization': `Bearer ${authToken}` } 
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            alert(data.message);
+            // 迁移完成后刷新会话列表，确保最新数据被加载
+            fetchSessions();
+        } else {
+            alert("迁移失败: " + data.message);
+        }
+    } catch (e) {
+        alert("请求失败: " + e.message);
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
