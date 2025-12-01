@@ -12,9 +12,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --- 0. R2 对象存储配置 ---
-// 请确保在环境变量中配置了 R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_DOMAIN
-// 如果没有配置 R2，代码会自动降级回不上传
+// 必须在 .env 文件中配置以下变量
 const hasR2Config = process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_DOMAIN;
+
+if (!hasR2Config) {
+    console.log("提示: 未检测到完整的 R2 配置，将使用本地/Base64 存储模式。");
+} else {
+    console.log("提示: R2 对象存储已启用。");
+}
 
 const r2Client = hasR2Config ? new S3Client({
     region: 'auto',
@@ -29,19 +34,20 @@ const R2_DOMAIN = process.env.R2_DOMAIN;
 
 // --- 1. 动态账号配置 ---
 const USERS = {};
-let userCount = 0;
 for (const key in process.env) {
     if (key.startsWith('ACC_')) {
         USERS[key.slice(4)] = process.env[key];
-        userCount++;
     }
 }
 const ADMIN_USER = process.env.ADMIN_USER || "libala";
 
 // --- 2. 数据存储 ---
 const DATA_DIR = '/app/data'; 
-const DB_FILE = path.join(DATA_DIR, 'chat.db'); 
-const OLD_DB_FILE = path.join(DATA_DIR, 'database.json');
+// 本地开发如果没有 /app/data，会自动降级到当前目录的 data 文件夹
+const LOCAL_DATA_DIR = path.join(__dirname, 'data');
+const DB_DIR = fs.existsSync('/app') ? DATA_DIR : LOCAL_DATA_DIR;
+const DB_FILE = path.join(DB_DIR, 'chat.db'); 
+const OLD_DB_FILE = path.join(DB_DIR, 'database.json');
 
 // --- 默认预设 ---
 const DEFAULT_PRESETS = [
@@ -88,9 +94,15 @@ function getBeijingTime() {
 let db;
 function initDB() {
     return new Promise(async (resolve, reject) => {
-        try { if (!fs.existsSync(DATA_DIR)) await fsPromises.mkdir(DATA_DIR, { recursive: true }); } catch (e) {}
+        try { 
+            if (!fs.existsSync(DB_DIR)) await fsPromises.mkdir(DB_DIR, { recursive: true }); 
+        } catch (e) {
+            console.error("创建数据目录失败:", e);
+        }
+
         db = new sqlite3.Database(DB_FILE, async (err) => {
             if (err) return reject(err);
+            console.log(`Database connected: ${DB_FILE}`);
             db.serialize(() => {
                 db.run(`CREATE TABLE IF NOT EXISTS presets (id TEXT PRIMARY KEY, name TEXT, desc TEXT, url TEXT, key TEXT, modelId TEXT, icon TEXT, system_prompt TEXT)`);
                 db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT, title TEXT, mode TEXT, created_at INTEGER, updated_at INTEGER)`);
@@ -234,7 +246,7 @@ async function processMessagesForR2(messages) {
             await Promise.all(msg.content.map(processContentItem));
         }
     }
-    return newMessages; // 即使没有修改，也返回深拷贝的对象
+    return newMessages; 
 }
 
 
@@ -566,12 +578,12 @@ app.post('/api/admin/migrate', async (req, res) => {
     res.json(await checkAndMigrateData(true));
 });
 
-// --- 新增：历史图片迁移接口 ---
+// --- 新增：历史图片迁移接口 (将数据库中的 Base64 迁移到 R2) ---
 app.post('/api/admin/migrate-images', async (req, res) => {
     const user = tokenMap.get(req.headers['authorization']?.replace('Bearer ', ''));
     if (user !== ADMIN_USER) return res.status(403).json({ success: false, message: "权限不足" });
     
-    if (!hasR2Config) return res.status(400).json({ success: false, message: "未配置 R2 环境变量" });
+    if (!hasR2Config) return res.status(400).json({ success: false, message: "未配置 R2 环境变量，无法迁移。" });
 
     try {
         console.log("开始扫描历史图片...");
@@ -611,7 +623,7 @@ app.post('/api/admin/migrate-images', async (req, res) => {
             }
         }
         
-        // 瘦身数据库
+        // 瘦身数据库 (释放 Base64 占用的空间)
         if (migratedCount > 0) {
             await dbRun("VACUUM"); 
         }
