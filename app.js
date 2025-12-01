@@ -874,10 +874,11 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
         currentPresetId = presetIdOverride;
     }
     
-    isRequesting = true; document.getElementById('sendBtn').disabled = true;
-    
-    // --- 关键修复：直接获取元素引用 ---
-    // appendUI 现在返回 DOM 元素本身
+    // --- 关键修复：确保状态锁被设置 ---
+    isRequesting = true; 
+    document.getElementById('sendBtn').disabled = true;
+
+    // 4. 立即创建 AI 消息 UI
     const appendResult = appendUI(null, "ai", "", [], true);
     aiMsgElement = appendResult.element; 
     aiMsgId = appendResult.id;
@@ -889,9 +890,10 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
     // 再次确认元素存在
     if (!aiMsgElement || !aiContentDiv || !aiMsgBubble) {
         console.error("Critical UI error: Could not find AI message elements after appendUI.");
+        showToast("UI 渲染失败，请刷新页面。");
+        // 如果失败，强制进入 finally 释放锁
         isRequesting = false; 
         document.getElementById('sendBtn').disabled = false;
-        showToast("UI 渲染失败，请刷新页面。");
         return; 
     }
     
@@ -991,6 +993,7 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
         `);
         lucide.createIcons({ root: aiMsgBubble }); 
     } finally { 
+        // --- 关键修复：确保锁被释放 ---
         isRequesting = false; 
         document.getElementById('sendBtn').disabled = false; 
     }
