@@ -10,8 +10,9 @@ let isRegisterMode = false;
 // --- 核心修复：Marked 配置 - 增加代码高亮和复制按钮 ---
 try {
     // 增加复制按钮的 HTML 模板
+    // 注意：这里 onclick="copyCode(this)" 需要配合全局函数 copyCode
     const copyButtonHtml = `
-        <button class="copy-code-btn icon-btn" style="position:absolute; top:8px; right:8px; background:rgba(255,255,255,0.2); color:#fff; padding:6px; border-radius:6px; font-size:12px;" onclick="copyCode(this)">
+        <button class="copy-code-btn icon-btn" style="position:absolute; top:8px; right:8px; background:rgba(255,255,255,0.2); color:#fff; padding:6px; border-radius:6px; font-size:12px; z-index:10;" onclick="copyCode(this)" title="复制">
             <i data-lucide="copy" style="width:14px;height:14px;"></i>
         </button>
     `;
@@ -23,8 +24,12 @@ try {
         highlight: function (code, lang) {
             // 安全检查 hljs 是否存在
             if (typeof hljs === 'undefined') return code;
-            const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-            return hljs.highlight(code, { language }).value;
+            try {
+                const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                return hljs.highlight(code, { language }).value;
+            } catch (e) {
+                return code;
+            }
         },
         renderer: {
             code(code, lang, escaped) {
@@ -39,7 +44,8 @@ try {
                 const languageClass = lang ? `language-${lang}` : 'hljs';
                 
                 // 将代码块包装在 pre 标签内，并添加复制按钮
-                return `<pre style="position:relative;"><code class="${languageClass}">${code}\n</code>${copyButtonHtml}</pre>`;
+                // 关键：pre 必须 relative 定位，以便 button 绝对定位
+                return `<pre style="position:relative; padding-top:32px;"><code class="${languageClass}">${code}\n</code>${copyButtonHtml}</pre>`;
             },
         },
         hooks: {
@@ -579,6 +585,9 @@ function showToast(message) {
 
 function copyCode(button) {
     // 复制 Markdown 代码块或指令
+    // 防止冒泡触发其他点击事件
+    if (event) event.stopPropagation();
+    
     const pre = button.closest('pre');
     if (!pre) return;
     
@@ -590,13 +599,15 @@ function copyCode(button) {
     
     // 更改按钮图标和提示
     const icon = button.querySelector('i');
-    icon.setAttribute('data-lucide', 'check');
-    lucide.createIcons({ root: button });
-    
-    setTimeout(() => {
-        icon.setAttribute('data-lucide', 'copy');
+    if (icon) {
+        icon.setAttribute('data-lucide', 'check');
         lucide.createIcons({ root: button });
-    }, 1500);
+        
+        setTimeout(() => {
+            icon.setAttribute('data-lucide', 'copy');
+            lucide.createIcons({ root: button });
+        }, 1500);
+    }
 }
 
 
@@ -922,10 +933,7 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
                     const rawHtml = marked.parse(String(aiFullText));
                     aiContentDiv.innerHTML = DOMPurify.sanitize(rawHtml);
                 } catch (err) {
-                    // 如果解析失败（例如代码块未闭合），回退到显示部分 HTML 或 纯文本
-                    // 这里我们不直接赋值 innerText，而是不做处理，等待下一帧数据补全
-                    // 或者可以暂时显示纯文本，但不要永久覆盖渲染逻辑
-                    // aiContentDiv.innerText = aiFullText; // 暂时注释掉，防止闪烁
+                    // 忽略流式过程中的解析错误
                 }
             }
 
@@ -933,14 +941,23 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
             if(box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
         }
         
-        // 最终渲染保护
+        // 最终渲染保护：修复"消息完成后渲染失效"的问题
         try {
+            // 1. 先进行核心渲染，确保 HTML 正确
             const finalHtml = marked.parse(String(aiFullText));
             aiContentDiv.innerHTML = DOMPurify.sanitize(finalHtml);
-            addCopyButtons(aiContentDiv); 
+            
+            // 2. 单独尝试添加复制按钮，避免因图标库问题导致整个内容降级
+            try {
+                addCopyButtons(aiContentDiv); 
+            } catch (btnError) {
+                console.warn("添加复制按钮失败:", btnError);
+                // 仅打印警告，不影响内容显示
+            }
         } catch (e) {
             console.error("Final render error:", e);
-            aiContentDiv.innerText = aiFullText; // 只有在最终完全解析失败时才降级
+            // 只有核心 Markdown 解析彻底失败时，才回退到纯文本
+            aiContentDiv.innerText = aiFullText; 
         }
 
         // --- 修复关键：使用引用插入 meta 和按钮 ---
@@ -1033,7 +1050,10 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
             try {
                 // 安全渲染，防止 marked 报错阻塞 UI
                 cHtml = DOMPurify.sanitize(marked.parse(String(text)));
-                // addCopyButtons(cHtml); // 不在这里调用，交给 sendMessage 最终调用
+                // 渲染完整消息时也尝试添加按钮
+                setTimeout(() => {
+                   try { addCopyButtons(div.querySelector('.message-content')); } catch(e){} 
+                }, 0);
             } catch (e) {
                 console.error("Marked parse error:", e);
                 cHtml = text.replace(/</g, "&lt;"); // 降级为纯文本
@@ -1051,23 +1071,19 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
  * 遍历消息内容，为代码块添加复制按钮 (供最终渲染调用)
  */
 function addCopyButtons(element) {
+    if (!element) return;
+    
     if (typeof element === 'string') {
-        // 如果传入的是 HTML 字符串，先转为 DOM 元素进行操作
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = element;
-        element = tempDiv;
+        // 如果传入的是 HTML 字符串，不处理，marked renderer 已经处理了
+        return element;
     }
     
-    // 查找所有代码块 <pre>
+    // 如果传入的是 DOM 元素
     element.querySelectorAll('pre').forEach(pre => {
-        // 复制按钮已在 marked.js 的 renderer.code 中添加，这里只需确保 lucide 图标被创建
+        // 复制按钮已在 marked.js 的 renderer.code 中添加 HTML 结构
+        // 这里只需确保 lucide 图标被创建
         lucide.createIcons({ root: pre });
     });
-
-    // 如果传入的是临时 div，返回其内部 HTML 字符串
-    if (element.id !== 'chat-box' && !element.classList.contains('message-content')) {
-        return element.innerHTML;
-    }
 }
 
 
