@@ -19,8 +19,10 @@ try {
     marked.use({
         breaks: true,
         gfm: true,
-        async: false,
+        async: false, // 强制同步
         highlight: function (code, lang) {
+            // 安全检查 hljs 是否存在
+            if (typeof hljs === 'undefined') return code;
             const language = hljs.getLanguage(lang) ? lang : 'plaintext';
             return hljs.highlight(code, { language }).value;
         },
@@ -41,9 +43,8 @@ try {
             },
         },
         hooks: {
-            // 在渲染完成后为所有代码块添加复制按钮
             postprocess(html) {
-                return html; // 复制按钮已在 renderer.code 中添加
+                return html; 
             }
         }
     });
@@ -789,7 +790,15 @@ async function regenerateResponse(msgId) {
     const sessData = await sessRes.json();
     
     // 3. 构造用于 API 的消息列表
-    const messages = sessData.messages.map(m => ({ role: m.role, content: m.content }));
+    // 核心修复：后端可能还未删除那条 AI 消息，所以获取到的列表中最后一条可能是 assistant
+    // 我们必须手动移除末尾的 assistant 消息，确保最后一条是 user
+    let messages = sessData.messages.map(m => ({ role: m.role, content: m.content }));
+    
+    // 循环移除末尾的非 user 消息 (通常只有一条 assistant，但为了保险起见)
+    while (messages.length > 0 && messages[messages.length - 1].role !== 'user') {
+        messages.pop();
+    }
+
     const lastMsg = messages[messages.length - 1];
 
     if (!lastMsg || lastMsg.role !== 'user') {
@@ -906,11 +915,18 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
                 }
             }
             
-            // 流式渲染保护
-            try {
-                aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
-            } catch (err) {
-                aiContentDiv.innerText = aiFullText;
+            // 流式渲染保护 - 优化 Markdown 渲染逻辑
+            if (aiFullText) {
+                try {
+                    // 确保输入是字符串
+                    const rawHtml = marked.parse(String(aiFullText));
+                    aiContentDiv.innerHTML = DOMPurify.sanitize(rawHtml);
+                } catch (err) {
+                    // 如果解析失败（例如代码块未闭合），回退到显示部分 HTML 或 纯文本
+                    // 这里我们不直接赋值 innerText，而是不做处理，等待下一帧数据补全
+                    // 或者可以暂时显示纯文本，但不要永久覆盖渲染逻辑
+                    // aiContentDiv.innerText = aiFullText; // 暂时注释掉，防止闪烁
+                }
             }
 
             const box = document.getElementById('chat-box');
@@ -919,10 +935,12 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
         
         // 最终渲染保护
         try {
-            aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiFullText));
+            const finalHtml = marked.parse(String(aiFullText));
+            aiContentDiv.innerHTML = DOMPurify.sanitize(finalHtml);
             addCopyButtons(aiContentDiv); 
         } catch (e) {
-            aiContentDiv.innerText = aiFullText;
+            console.error("Final render error:", e);
+            aiContentDiv.innerText = aiFullText; // 只有在最终完全解析失败时才降级
         }
 
         // --- 修复关键：使用引用插入 meta 和按钮 ---
@@ -1014,7 +1032,7 @@ function appendUI(id, role, text, images=[], isLoading=false, timestamp=null) {
         } else {
             try {
                 // 安全渲染，防止 marked 报错阻塞 UI
-                cHtml = DOMPurify.sanitize(marked.parse(text));
+                cHtml = DOMPurify.sanitize(marked.parse(String(text)));
                 // addCopyButtons(cHtml); // 不在这里调用，交给 sendMessage 最终调用
             } catch (e) {
                 console.error("Marked parse error:", e);
