@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>左耳 AI | Li Bala's Ear</title>
-    
+
     <!-- PWA 配置 -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
@@ -22,14 +24,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    
+
     <link rel="stylesheet" href="style.css?v=3.3">
-    
+
     <style>
         #login-screen {
-            background: radial-gradient(circle at 30% 20%, #2a2340, #0c0c16) !important;
+            background: linear-gradient(160deg, #18181b 0%, #0f0f12 50%, #18181b 100%) !important;
             font-family: "Segoe UI", sans-serif;
-            color: #ddd;
+            color: #e4e4e7;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -48,15 +50,23 @@
             border-radius: 50%;
             object-fit: cover;
             margin-bottom: 20px;
-            box-shadow: 0 0 25px rgba(156, 116, 255, 0.4);
-            border: 2px solid rgba(156, 116, 255, 0.2);
+            box-shadow: 0 0 30px rgba(34, 211, 238, 0.3);
+            border: 2px solid rgba(34, 211, 238, 0.3);
             animation: float 6s ease-in-out infinite;
         }
 
         @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0px); }
+            0% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+
+            100% {
+                transform: translateY(0px);
+            }
         }
 
         .login-title-text {
@@ -79,12 +89,12 @@
             padding: 30px;
             width: 85%;
             max-width: 340px;
-            background: rgba(255,255,255,0.05) !important;
+            background: rgba(255, 255, 255, 0.05) !important;
             backdrop-filter: blur(10px);
             border-radius: 12px;
             position: relative;
             border: none !important;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
         }
 
         #login-screen .login-box::before {
@@ -94,8 +104,8 @@
             top: 10%;
             height: 80%;
             width: 3px;
-            background: linear-gradient(#9c74ff, #c0a5ff);
-            box-shadow: 0 0 15px #b48dff;
+            background: linear-gradient(#22d3ee, #06b6d4);
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.5);
             border-radius: 2px;
         }
 
@@ -105,24 +115,24 @@
             margin: 0 0 16px 0;
             border: none !important;
             border-radius: 8px;
-            background: rgba(255,255,255,0.12) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
             color: #fff !important;
             outline: none;
             font-size: 16px;
             box-sizing: border-box;
             transition: all 0.3s ease;
         }
-        
+
         #login-screen .login-input::placeholder {
-            color: rgba(255,255,255,0.5);
+            color: rgba(255, 255, 255, 0.5);
         }
 
         #login-screen .login-btn {
             width: 100%;
             padding: 14px;
             border: none;
-            background: #9c74ff !important;
-            color: white !important;
+            background: #22d3ee !important;
+            color: #18181b !important;
             border-radius: 8px;
             font-size: 16px;
             font-weight: 600;
@@ -132,11 +142,11 @@
         }
 
         #login-screen .login-btn:hover {
-            background: #b48dff !important;
-            box-shadow: 0 0 20px #b48dff;
+            background: #67e8f9 !important;
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.5);
             transform: translateY(-1px);
         }
-        
+
         #login-screen .login-btn:active {
             transform: scale(0.98);
         }
@@ -151,19 +161,33 @@
         }
 
         .switch-mode-text:hover {
-            color: #fff;
-            text-shadow: 0 0 10px rgba(156, 116, 255, 0.6);
+            color: #22d3ee;
+            text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
         }
 
-        .fade-in { animation: fadeIn 0.4s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
+        .fade-in {
+            animation: fadeIn 0.4s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         /* 公告 Tab 样式 */
         .announce-tabs {
             display: flex;
             border-bottom: 1px solid var(--border-color);
             background: var(--bg-color);
         }
+
         .announce-tab {
             flex: 1;
             padding: 12px;
@@ -174,6 +198,7 @@
             font-weight: 500;
             transition: all 0.2s;
         }
+
         .announce-tab.active {
             color: var(--text-color);
             border-bottom: 2px solid var(--primary-color);
@@ -190,250 +215,319 @@
             border-radius: 6px;
             border: 1px solid var(--border-color);
             font-family: monospace;
-            display: none; /* 默认隐藏，有数据时显示 */
+            display: none;
+            /* 默认隐藏，有数据时显示 */
         }
-        
-        @media (max-height: 600px) { .login-logo { width: 100px; height: 100px; margin-bottom: 10px; } .login-subtitle { margin-bottom: 15px; } }
+
+        @media (max-height: 600px) {
+            .login-logo {
+                width: 100px;
+                height: 100px;
+                margin-bottom: 10px;
+            }
+
+            .login-subtitle {
+                margin-bottom: 15px;
+            }
+        }
     </style>
 </head>
+
 <body>
 
-<div id="login-screen">
-    <img src="logo.png" alt="左耳AI" class="login-logo">
+    <div id="login-screen">
+        <img src="logo.png" alt="左耳AI" class="login-logo">
 
-    <div class="login-title-text">Welcome to 左耳 AI</div>
-    <div class="login-subtitle">黎吧啦在听。</div>
+        <div class="login-title-text">Welcome to 左耳 AI</div>
+        <div class="login-subtitle">黎吧啦在听。</div>
 
-    <div class="login-box">
-        <input type="text" id="loginUser" class="login-input" placeholder="写上你的代号，黎吧啦在听。" autocomplete="off">
-        <input type="password" id="loginPass" class="login-input" placeholder="嘘，说小声点。">
-        
-        <input type="password" id="loginPassConfirm" class="login-input" placeholder="再说一遍暗号。" style="display:none;">
-        <input type="text" id="regInviteCode" class="login-input" placeholder="邀请码 (必填)" style="display:none;">
-        
-        <button class="login-btn" id="actionBtn" onclick="handleSubmit()">进入站点</button>
-        
-        <div class="switch-mode-text" onclick="toggleRegisterMode()">
-            没有通行证？<span style="color: #9c74ff; font-weight:600;">立即注册</span>
-        </div>
-    </div>
-</div>
+        <div class="login-box">
+            <input type="text" id="loginUser" class="login-input" placeholder="写上你的代号，黎吧啦在听。" autocomplete="off">
+            <input type="password" id="loginPass" class="login-input" placeholder="嘘，说小声点。">
 
-<div id="announceModal" class="modal">
-    <div class="modal-panel" style="max-width: 600px; height: 70vh;">
-        <div class="modal-header" style="flex-shrink:0;">
-            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">📢 站点公告</h3>
-            <button class="icon-btn" onclick="document.getElementById('announceModal').classList.remove('open')"><i data-lucide="x"></i></button>
-        </div>
-        
-        <div class="announce-tabs">
-            <div class="announce-tab active" onclick="switchAnnounceTab('latest')" id="tab-latest">最新公告</div>
-            <div class="announce-tab" onclick="switchAnnounceTab('history')" id="tab-history">历史记录</div>
-        </div>
+            <input type="password" id="loginPassConfirm" class="login-input" placeholder="再说一遍暗号。"
+                style="display:none;">
+            <input type="text" id="regInviteCode" class="login-input" placeholder="邀请码 (必填)" style="display:none;">
 
-        <div id="announceContentArea" style="flex:1; overflow-y:auto; padding:0;">
-            <div id="view-latest" class="announce-content" style="padding:20px;"></div>
-            <div id="view-history" style="display:none; padding:10px;">
-                <div id="announceHistoryList" style="display:flex; flex-direction:column; gap:12px;"></div>
+            <button class="login-btn" id="actionBtn" onclick="handleSubmit()">进入站点</button>
+
+            <div class="switch-mode-text" onclick="toggleRegisterMode()">
+                没有通行证？<span style="color: #22d3ee; font-weight:600;">立即注册</span>
             </div>
         </div>
-
-        <div style="padding:16px; border-top:1px solid var(--border-color); text-align:right; flex-shrink:0;">
-             <button class="login-btn" style="width:auto; padding:8px 24px;" onclick="closeAnnouncement()">知道了</button>
-        </div>
     </div>
-</div>
 
-<div id="adminModal" class="modal">
-    <div class="modal-panel">
-        <div class="modal-header">
-            <h3 style="margin:0; display:flex; align-items:center; gap:8px;"><i data-lucide="settings-2"></i> 管理后台</h3>
-            <button class="icon-btn" onclick="document.getElementById('adminModal').classList.remove('open')"><i data-lucide="x"></i></button>
-        </div>
-        <div class="admin-body" style="flex:1; overflow-y:auto; padding:24px;">
-            
-            <div class="accordion-item">
-                <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminAnnouncements();">
-                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="megaphone"></i> 公告管理</span>
-                    <i data-lucide="chevron-down"></i>
-                </div>
-                <div class="accordion-body">
-                    <textarea id="announceInput" class="login-input" style="height:80px; resize:vertical; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="发布新公告 (自动追加当前时间)"></textarea>
-                    <div style="text-align:right; margin-bottom:16px;">
-                        <button class="login-btn" style="width:auto; padding:8px 20px;" onclick="postAnnouncement()">发布</button>
-                    </div>
-                    <div style="border-top:1px solid var(--border-color); padding-top:12px;">
-                        <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">历史公告 (管理)</div>
-                        <div id="adminAnnounceList" style="display:flex; flex-direction:column; gap:8px;"></div>
-                    </div>
+    <div id="announceModal" class="modal">
+        <div class="modal-panel" style="max-width: 600px; height: 70vh;">
+            <div class="modal-header" style="flex-shrink:0;">
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">📢 站点公告</h3>
+                <button class="icon-btn" onclick="document.getElementById('announceModal').classList.remove('open')"><i
+                        data-lucide="x"></i></button>
+            </div>
+
+            <div class="announce-tabs">
+                <div class="announce-tab active" onclick="switchAnnounceTab('latest')" id="tab-latest">最新公告</div>
+                <div class="announce-tab" onclick="switchAnnounceTab('history')" id="tab-history">历史记录</div>
+            </div>
+
+            <div id="announceContentArea" style="flex:1; overflow-y:auto; padding:0;">
+                <div id="view-latest" class="announce-content" style="padding:20px;"></div>
+                <div id="view-history" style="display:none; padding:10px;">
+                    <div id="announceHistoryList" style="display:flex; flex-direction:column; gap:12px;"></div>
                 </div>
             </div>
 
-            <div class="accordion-item">
-                <div class="accordion-header" onclick="toggleAccordion(this); fetchInviteInfo();">
-                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="ticket"></i> 邀请码管理</span>
-                    <i data-lucide="chevron-down"></i>
-                </div>
-                <div class="accordion-body">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color);">
-                        <span style="font-size:14px; font-weight:500;">启用注册邀请制</span>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span id="inviteStatusText" style="font-size:12px; color:var(--text-secondary);">已关闭</span>
-                            <button id="inviteToggleBtn" onclick="toggleInviteSystem()" class="login-btn" style="width:auto; padding:6px 16px; font-size:12px; background:var(--text-secondary)!important;">开启</button>
+            <div style="padding:16px; border-top:1px solid var(--border-color); text-align:right; flex-shrink:0;">
+                <button class="login-btn" style="width:auto; padding:8px 24px;"
+                    onclick="closeAnnouncement()">知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="adminModal" class="modal">
+        <div class="modal-panel">
+            <div class="modal-header">
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;"><i data-lucide="settings-2"></i> 管理后台
+                </h3>
+                <button class="icon-btn" onclick="document.getElementById('adminModal').classList.remove('open')"><i
+                        data-lucide="x"></i></button>
+            </div>
+            <div class="admin-body" style="flex:1; overflow-y:auto; padding:24px;">
+
+                <div class="accordion-item">
+                    <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminAnnouncements();">
+                        <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="megaphone"></i>
+                            公告管理</span>
+                        <i data-lucide="chevron-down"></i>
+                    </div>
+                    <div class="accordion-body">
+                        <textarea id="announceInput" class="login-input"
+                            style="height:80px; resize:vertical; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                            placeholder="发布新公告 (自动追加当前时间)"></textarea>
+                        <div style="text-align:right; margin-bottom:16px;">
+                            <button class="login-btn" style="width:auto; padding:8px 20px;"
+                                onclick="postAnnouncement()">发布</button>
+                        </div>
+                        <div style="border-top:1px solid var(--border-color); padding-top:12px;">
+                            <div
+                                style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
+                                历史公告 (管理)</div>
+                            <div id="adminAnnounceList" style="display:flex; flex-direction:column; gap:8px;"></div>
                         </div>
                     </div>
-                    
-                    <div style="margin-bottom:16px; display:flex; gap:12px;">
-                        <button class="login-btn" style="flex:1;" onclick="generateInviteCode()">🎲 生成随机邀请码</button>
+                </div>
+
+                <div class="accordion-item">
+                    <div class="accordion-header" onclick="toggleAccordion(this); fetchInviteInfo();">
+                        <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="ticket"></i> 邀请码管理</span>
+                        <i data-lucide="chevron-down"></i>
                     </div>
+                    <div class="accordion-body">
+                        <div
+                            style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color);">
+                            <span style="font-size:14px; font-weight:500;">启用注册邀请制</span>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span id="inviteStatusText"
+                                    style="font-size:12px; color:var(--text-secondary);">已关闭</span>
+                                <button id="inviteToggleBtn" onclick="toggleInviteSystem()" class="login-btn"
+                                    style="width:auto; padding:6px 16px; font-size:12px; background:var(--text-secondary)!important;">开启</button>
+                            </div>
+                        </div>
 
-                    <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">有效邀请码列表 (点击可复制)</div>
-                    <div id="inviteCodeList" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:8px;"></div>
-                </div>
-            </div>
+                        <div style="margin-bottom:16px; display:flex; gap:12px;">
+                            <button class="login-btn" style="flex:1;" onclick="generateInviteCode()">🎲 生成随机邀请码</button>
+                        </div>
 
-            <div class="accordion-item">
-                <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminStats();">
-                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="bar-chart-3"></i> 调用统计</span>
-                    <i data-lucide="chevron-down"></i>
+                        <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
+                            有效邀请码列表 (点击可复制)</div>
+                        <div id="inviteCodeList"
+                            style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:8px;">
+                        </div>
+                    </div>
                 </div>
-                <div class="accordion-body">
-                    <div id="statGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;"></div>
-                </div>
-            </div>
-            
-            <div class="accordion-item">
-                <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminPresets();">
-                    <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="cpu"></i> 模型预设管理</span>
-                    <i data-lucide="chevron-down"></i>
-                </div>
-                <div class="accordion-body">
-                    <div id="adminPresetList" style="margin-bottom:16px; display:flex; flex-direction:column; gap:8px;"></div>
-                    <div style="background:var(--bg-color); padding:16px; border-radius:8px; border:1px solid var(--border-color); margin-top:16px;">
-                        <div style="font-weight:600; margin-bottom:12px; font-size:14px;" id="addFormTitle">添加新预设</div>
-                        
-                        <input type="text" id="addId" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="ID (留空自动生成，置顶填 libala_main)">
-                        
-                        <div style="display:grid; gap:12px; margin-top:12px;">
-                            <input type="text" id="addName" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="显示名称">
-                            
-                            <input type="text" id="addIcon" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="图标 (输入Emoji 或 图片URL)">
-                            
-                            <input type="text" id="addDesc" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="描述">
-                            
-                            <textarea id="addPrompt" class="login-input" style="margin:0; height:80px; resize:vertical; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="System Prompt (例如：你现在扮演黎吧啦...)"></textarea>
 
-                            <input type="text" id="addUrl" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="API Base URL">
-                            <input type="text" id="addKey" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="API Key">
-                            <input type="text" id="addModelId" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="Model ID">
-                            
-                            <!-- 新增：上下文长度输入 -->
-                            <input type="number" id="addContextLen" class="login-input" style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;" placeholder="上下文长度 (如 128000，显示为 125k)">
+                <div class="accordion-item">
+                    <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminStats();">
+                        <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="bar-chart-3"></i>
+                            调用统计</span>
+                        <i data-lucide="chevron-down"></i>
+                    </div>
+                    <div class="accordion-body">
+                        <div id="statGrid"
+                            style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+                        </div>
+                    </div>
+                </div>
 
-                            <div style="display:flex; gap:12px;">
-                                <button class="login-btn" style="flex:1;" onclick="savePreset()" id="savePresetBtn">保存配置</button>
-                                <button class="btn-ghost" style="width:auto; padding:0 20px; border-radius:12px;" onclick="resetPresetForm()">重置</button>
+                <div class="accordion-item">
+                    <div class="accordion-header" onclick="toggleAccordion(this); fetchAdminPresets();">
+                        <span style="display:flex;align-items:center;gap:8px;"><i data-lucide="cpu"></i> 模型预设管理</span>
+                        <i data-lucide="chevron-down"></i>
+                    </div>
+                    <div class="accordion-body">
+                        <div id="adminPresetList"
+                            style="margin-bottom:16px; display:flex; flex-direction:column; gap:8px;"></div>
+                        <div
+                            style="background:var(--bg-color); padding:16px; border-radius:8px; border:1px solid var(--border-color); margin-top:16px;">
+                            <div style="font-weight:600; margin-bottom:12px; font-size:14px;" id="addFormTitle">添加新预设
+                            </div>
+
+                            <input type="text" id="addId" class="login-input"
+                                style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                                placeholder="ID (留空自动生成，置顶填 libala_main)">
+
+                            <div style="display:grid; gap:12px; margin-top:12px;">
+                                <input type="text" id="addName" class="login-input"
+                                    style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                                    placeholder="显示名称">
+
+                                <input type="text" id="addIcon" class="login-input"
+                                    style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                                    placeholder="图标 (输入Emoji 或 图片URL)">
+
+                                <input type="text" id="addDesc" class="login-input"
+                                    style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                                    placeholder="描述">
+
+                                <textarea id="addPrompt" class="login-input"
+                                    style="margin:0; height:80px; resize:vertical; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                                    placeholder="System Prompt (例如：你现在扮演黎吧啦...)"></textarea>
+
+                                <input type="text" id="addUrl" class="login-input"
+                                    style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                                    placeholder="API Base URL">
+                                <input type="text" id="addKey" class="login-input"
+                                    style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                                    placeholder="API Key">
+                                <input type="text" id="addModelId" class="login-input"
+                                    style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                                    placeholder="Model ID">
+
+                                <!-- 新增：上下文长度输入 -->
+                                <input type="number" id="addContextLen" class="login-input"
+                                    style="margin:0; background:var(--bg-color)!important; color:var(--text-color)!important; border:1px solid var(--border-color)!important;"
+                                    placeholder="上下文长度 (如 128000，显示为 125k)">
+
+                                <div style="display:flex; gap:12px;">
+                                    <button class="login-btn" style="flex:1;" onclick="savePreset()"
+                                        id="savePresetBtn">保存配置</button>
+                                    <button class="btn-ghost" style="width:auto; padding:0 20px; border-radius:12px;"
+                                        onclick="resetPresetForm()">重置</button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div style="text-align:center; margin-top:20px;">
-                <button class="btn-danger sidebar-btn" onclick="forceMigrate()" style="justify-content:center;">
-                    <i data-lucide="database-backup"></i> 从旧数据导入
-                </button>
-                <button class="btn-ghost sidebar-btn" onclick="forceMigrateImages()" style="justify-content:center; margin-top:10px;">
-                    <i data-lucide="image-up"></i> 迁移旧图片到 R2
-                </button>
+                <div style="text-align:center; margin-top:20px;">
+                    <button class="btn-danger sidebar-btn" onclick="forceMigrate()" style="justify-content:center;">
+                        <i data-lucide="database-backup"></i> 从旧数据导入
+                    </button>
+                    <button class="btn-ghost sidebar-btn" onclick="forceMigrateImages()"
+                        style="justify-content:center; margin-top:10px;">
+                        <i data-lucide="image-up"></i> 迁移旧图片到 R2
+                    </button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="app-container" id="app">
-    <div class="overlay" onclick="toggleSidebar()"></div>
-    
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-content">
-            <div class="search-box">
-                <input type="text" class="search-input" id="searchInput" placeholder="搜索..." oninput="handleSearch(this.value)">
-                <i data-lucide="search" class="search-icon"></i>
-            </div>
-            <div id="normalSidebarList" style="display:flex; flex-direction:column; gap:24px;">
-                <div><div class="section-title">新对话</div><div class="mode-list" id="presetList"></div></div>
-                <div>
-                    <div class="section-title" style="display:flex; justify-content:space-between;"><span>历史记录</span><span id="sessionCount" style="font-weight:normal;"></span></div>
-                    <div id="sessionListContainer"></div>
+    <div class="app-container" id="app">
+        <div class="overlay" onclick="toggleSidebar()"></div>
+
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-content">
+                <div class="search-box">
+                    <input type="text" class="search-input" id="searchInput" placeholder="搜索..."
+                        oninput="handleSearch(this.value)">
+                    <i data-lucide="search" class="search-icon"></i>
+                </div>
+                <div id="normalSidebarList" style="display:flex; flex-direction:column; gap:24px;">
+                    <div>
+                        <div class="section-title">新对话</div>
+                        <div class="mode-list" id="presetList"></div>
+                    </div>
+                    <div>
+                        <div class="section-title" style="display:flex; justify-content:space-between;">
+                            <span>历史记录</span><span id="sessionCount" style="font-weight:normal;"></span></div>
+                        <div id="sessionListContainer"></div>
+                    </div>
+                </div>
+                <div id="searchResultList" style="display:none;">
+                    <div class="section-title">搜索结果</div>
+                    <div id="searchOutput" style="display:flex; flex-direction:column; gap:4px;"></div>
                 </div>
             </div>
-            <div id="searchResultList" style="display:none;">
-                <div class="section-title">搜索结果</div>
-                <div id="searchOutput" style="display:flex; flex-direction:column; gap:4px;"></div>
+            <div class="sidebar-footer">
+                <button class="sidebar-btn btn-ghost" onclick="checkAnnouncement(true)"><i data-lucide="bell"></i>
+                    查看公告</button>
+                <button id="adminBtn" onclick="openAdmin()" class="sidebar-btn btn-ghost" style="display:none;"><i
+                        data-lucide="settings"></i> 设置</button>
+                <button onclick="logout()" class="sidebar-btn btn-danger"><i data-lucide="log-out"></i> 退出登录</button>
             </div>
         </div>
-        <div class="sidebar-footer">
-            <button class="sidebar-btn btn-ghost" onclick="checkAnnouncement(true)"><i data-lucide="bell"></i> 查看公告</button>
-            <button id="adminBtn" onclick="openAdmin()" class="sidebar-btn btn-ghost" style="display:none;"><i data-lucide="settings"></i> 设置</button>
-            <button onclick="logout()" class="sidebar-btn btn-danger"><i data-lucide="log-out"></i> 退出登录</button>
+
+        <div class="main-chat">
+            <header class="chat-header">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <button class="icon-btn" onclick="toggleSidebar()" style="color:var(--text-color);"><i
+                            data-lucide="menu"></i></button>
+                    <div
+                        style="font-weight:600; font-size:16px; display:flex; align-items:center; color:var(--text-color);">
+                        <span
+                            style="width:8px; height:8px; background:#10b981; border-radius:50%; margin-right:8px; display:inline-block;"></span>
+                        <span id="headerTitle">左耳 AI</span>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:4px;">
+                    <!-- Token 显示区域 -->
+                    <div id="tokenDisplay" class="token-display">
+                        <span id="tokenLimitText">100k</span> / <span id="tokenCurrentText">0</span>
+                    </div>
+                    <button class="icon-btn" onclick="toggleTheme()"><i data-lucide="moon" id="themeIcon"></i></button>
+                </div>
+            </header>
+
+            <div id="chat-box"></div>
+
+            <div class="input-wrapper">
+                <div id="preview-area"></div>
+                <div class="input-box">
+                    <input type="file" id="fileInput" accept="image/*,.json,.txt,.js,.md,.csv,.py" multiple
+                        style="display:none;" onchange="handleFileSelect(this)">
+
+                    <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="上传文件"
+                        style="align-self:flex-end; margin-bottom:2px;">
+                        <i data-lucide="paperclip"></i>
+                    </button>
+                    <button class="icon-btn" id="searchToggleBtn" onclick="toggleSearch()" title="开启联网搜索"
+                        style="align-self:flex-end; margin-bottom:2px;">
+                        <i data-lucide="globe"></i>
+                    </button>
+
+                    <textarea id="userInput" placeholder="黎吧啦正在聆听..." rows="1" oninput="autoResize(this)"></textarea>
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                        <i data-lucide="arrow-up"></i>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
-
-    <div class="main-chat">
-        <header class="chat-header">
-            <div style="display:flex; align-items:center; gap:12px;">
-                <button class="icon-btn" onclick="toggleSidebar()" style="color:var(--text-color);"><i data-lucide="menu"></i></button>
-                <div style="font-weight:600; font-size:16px; display:flex; align-items:center; color:var(--text-color);">
-                    <span style="width:8px; height:8px; background:#10b981; border-radius:50%; margin-right:8px; display:inline-block;"></span>
-                    <span id="headerTitle">左耳 AI</span>
-                </div>
-            </div>
-            <div style="display:flex; align-items:center; gap:4px;">
-                <!-- Token 显示区域 -->
-                <div id="tokenDisplay" class="token-display">
-                    <span id="tokenLimitText">100k</span> / <span id="tokenCurrentText">0</span>
-                </div>
-                <button class="icon-btn" onclick="toggleTheme()"><i data-lucide="moon" id="themeIcon"></i></button>
-            </div>
-        </header>
-        
-        <div id="chat-box"></div>
-        
-        <div class="input-wrapper">
-            <div id="preview-area"></div>
-            <div class="input-box">
-                <input type="file" id="fileInput" accept="image/*,.json,.txt,.js,.md,.csv,.py" multiple style="display:none;" onchange="handleFileSelect(this)">
-                
-                <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="上传文件" style="align-self:flex-end; margin-bottom:2px;">
-                    <i data-lucide="paperclip"></i>
-                </button>
-                <button class="icon-btn" id="searchToggleBtn" onclick="toggleSearch()" title="开启联网搜索" style="align-self:flex-end; margin-bottom:2px;">
-                    <i data-lucide="globe"></i>
-                </button>
-
-                <textarea id="userInput" placeholder="黎吧啦正在聆听..." rows="1" oninput="autoResize(this)"></textarea>
-                <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-                    <i data-lucide="arrow-up"></i>
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-<script src="app.js?v=3.3"></script>
-<script>
-    // 注册 Service Worker
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then(registration => {
-                    console.log('SW registered:', registration);
-                })
-                .catch(error => {
-                    console.log('SW registration failed:', error);
-                });
-        });
-    }
-</script>
+    <script src="app.js?v=3.3"></script>
+    <script>
+        // 注册 Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => {
+                        console.log('SW registered:', registration);
+                    })
+                    .catch(error => {
+                        console.log('SW registration failed:', error);
+                    });
+            });
+        }
+    </script>
 </body>
-</html>
 
+</html>
