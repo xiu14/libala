@@ -530,6 +530,9 @@ html {
     /* 核心：为复制按钮提供定位上下文 */
     padding-top: 35px;
     /* 增加顶部空间以容纳复制按钮 */
+    max-width: 100%;
+    /* 限制最大宽度，防止超出消息气泡 */
+    box-sizing: border-box;
 }
 
 /* 代码块内部代码样式，确保代码占据剩余空间 */
@@ -537,6 +540,18 @@ html {
     background: transparent;
     padding: 0;
     display: block;
+    white-space: pre;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
+/* 消息内容区域溢出控制 */
+.message-content {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .message-bubble code {

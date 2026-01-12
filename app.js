@@ -10,9 +10,9 @@ let isRegisterMode = false;
 // --- 核心修复：Marked 配置 - 增加代码高亮和复制按钮 ---
 try {
     // 增加复制按钮的 HTML 模板
-    // 注意：这里 onclick="copyCode(this)" 需要配合全局函数 copyCode
+    // 注意：不使用 onclick，因为 DOMPurify 会过滤掉，改用事件委托
     const copyButtonHtml = `
-        <button class="copy-code-btn icon-btn" style="position:absolute; top:8px; right:8px; background:rgba(255,255,255,0.2); color:#fff; padding:6px; border-radius:6px; font-size:12px; z-index:10;" onclick="copyCode(this)" title="复制">
+        <button class="copy-code-btn icon-btn" style="position:absolute; top:8px; right:8px; background:rgba(255,255,255,0.2); color:#fff; padding:6px; border-radius:6px; font-size:12px; z-index:10;" title="复制">
             <i data-lucide="copy" style="width:14px;height:14px;"></i>
         </button>
     `;
@@ -113,6 +113,15 @@ window.onload = function () {
     });
 
     window.addEventListener('paste', handlePaste);
+
+    // 事件委托：处理代码块复制按钮点击（因为 DOMPurify 会过滤 onclick）
+    document.addEventListener('click', function (e) {
+        const copyBtn = e.target.closest('.copy-code-btn');
+        if (copyBtn) {
+            e.stopPropagation();
+            copyCode(copyBtn);
+        }
+    });
 };
 
 function isTouchDevice() { return 'ontouchstart' in window || navigator.maxTouchPoints > 0; }
@@ -1010,12 +1019,11 @@ async function sendMessage(messageContext = null, isRegenerate = false, presetId
             const finalHtml = marked.parse(processedText);
             aiContentDiv.innerHTML = DOMPurify.sanitize(finalHtml, { ADD_TAGS: ['details', 'summary'], ADD_ATTR: ['class'] });
 
-            // 2. 单独尝试添加复制按钮，避免因图标库问题导致整个内容降级
+            // 2. 渲染代码块中的 lucide 图标（复制按钮）
             try {
-                addCopyButtons(aiContentDiv);
-            } catch (btnError) {
-                console.warn("添加复制按钮失败:", btnError);
-                // 仅打印警告，不影响内容显示
+                lucide.createIcons({ root: aiContentDiv });
+            } catch (iconError) {
+                console.warn("渲染复制按钮图标失败:", iconError);
             }
         } catch (e) {
             console.error("Final render error:", e);
